@@ -513,13 +513,14 @@ c_ruleset = {
     # TODO: cwd("..") in user's space - TOCTOU vulnerability
     # TODO: There are many more rules to add, esp. for TOCTOU.
 }
-
+outfile = args.outfile
 for infile in args.infile:
 	i = 0
+	outfile.writelines("Analyzing " + infile.name + "...\n")
 	for line in infile:
 		i+=1
 		line = re.split(r'\W+', line)
-		print("line #", i, ": ", line)
 		for foo in line:
 			if foo in c_ruleset:
-				args.outfile.writelines(c_ruleset[foo][2] + "\n")
+				outfile.writelines("Line " + str(i) + ": " + foo + "\n")
+				outfile.writelines(c_ruleset[foo][2] + "\n")
