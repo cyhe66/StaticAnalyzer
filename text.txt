@@ -9,6 +9,13 @@ size_t getFilesize(const char* filename) {
 	stat(filename, &st);
 	return st.st_size;
 }
+//this is a full comment strcpy();
+// more comments
+blah; // this is also a comment strcpy();
+/*this is even more comments */
+/* multiline
+comment
+*/
 int main(int argc, char** argv) {
 	size_t filesize = getFilesize(argv[1]);
 	//Open file
@@ -23,6 +30,6 @@ int main(int argc, char** argv) {
 	int rc = munmap(mmappedData, filesize);
 	assert(rc == 0);
 	close(fd);
-	strcpy()
-	memcpy()
+	strcpy();
+	memcpy();
 }
