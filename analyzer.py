@@ -12,7 +12,9 @@ def parse_args():
     args = parser.parse_args()
     return args.infile #args.outfile
 
-def comment_remover(text):
+# removes single line comments // and /* */
+# replaces it with an empty space ' \n'
+def single_comment_remover(text):
     def replacer(match):
         s = match.group(0)
         if s.startswith('/'):
@@ -22,6 +24,27 @@ def comment_remover(text):
     pattern = re.compile(r'//.*?$|/\*.*?\*/|\'(?:\\.|[^\\\'])*\'|"(?:\\.|[^\\"])*"', re.DOTALL | re.MULTILINE)
     return re.sub(pattern, replacer, text)
 
+#returns a list of cleaned tuples
+def multi_comment_remover(code_tuple):
+    clean_code = []
+    in_comment = False
+    for line in code_tuple:
+        line  = (single_comment_remover(line[0]), line[1]) # string, line#
+        #if in between comment
+        if '*/' not in line[0] and in_comment:
+            print('commented line ', line)
+            line = (' \n', line[1])
+        #if code before comment
+        if '/*' in line[0]:
+            in_comment = True
+            line = (line[0][:line[0].find('/*',0)], line[1])
+        #if code after comment
+        if '*/' in line[0] and in_comment:
+            line = (line[0][line[0].find('*/',0)+2:], line[1])
+            in_comment = False
+        clean_code.append(line)
+    return code_tuple 
+
 def analyze(infiles):
     for infile in infiles:
         code_tuple = [] 
@@ -29,25 +52,9 @@ def analyze(infiles):
         length = 0
         for line in code:
             length += 1
-            #print(line + str(length))
             code_tuple.append((line,length))
-        #print(code_tuple)
-
-        for line in code_tuple:
-            line  = (comment_remover(line[0]), line[1])
-            print(line)
-        '''
-        code = "".join(infile.readlines())
-        clean_code = comment_remover(code)
-        line_number = 0
-        for line in clean_code.split('\n'):
-            print(line)
-            line_number += 1
-            line = re.split(r'\W+',line)
-            for word in line:
-                if word in rules:
-                    logging.warning("Line " + str(line_number) + ": " + word + "\n")
-        '''
+    clean_code = multi_comment_remover(code_tuple) 
+    print(clean_code)
     print('done with analysis.')
 
 if __name__ == "__main__":
@@ -61,3 +68,5 @@ if __name__ == "__main__":
     #print(outfile.readall())
     logging.basicConfig(level=logging.WARNING)
     analyze(infiles)
+
+

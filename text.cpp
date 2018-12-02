@@ -16,6 +16,10 @@ blah; // this is also a comment strcpy();
 /* multiline
 comment
 */
+
+/* and we have another multiline comment here */
+int j;/*and another one-
+right here*/ int k;
 int main(int argc, char** argv) {
 	size_t filesize = getFilesize(argv[1]);
 	//Open file
