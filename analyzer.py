@@ -12,13 +12,11 @@ def parse_args():
     args = parser.parse_args()
     return args.infile #args.outfile
 
-# removes single line comments // and /* */
-# replaces it with an empty space ' \n'
 def single_comment_remover(text):
     def replacer(match):
         s = match.group(0)
         if s.startswith('/'):
-            return " " # note: a space and not an empty string
+            return " " 
         else:
             return s
     pattern = re.compile(r'//.*?$|/\*.*?\*/|\'(?:\\.|[^\\\'])*\'|"(?:\\.|[^\\"])*"', re.DOTALL | re.MULTILINE)
@@ -32,7 +30,6 @@ def multi_comment_remover(code_tuple):
         line  = (single_comment_remover(line[0]), line[1]) # string, line#
         #if in between comment
         if '*/' not in line[0] and in_comment:
-            print('commented line ', line)
             line = (' \n', line[1])
         #if code before comment
         if '/*' in line[0]:
@@ -43,9 +40,9 @@ def multi_comment_remover(code_tuple):
             line = (line[0][line[0].find('*/',0)+2:], line[1])
             in_comment = False
         clean_code.append(line)
-    return code_tuple 
+    return clean_code 
 
-def analyze(infiles):
+def analyze(infiles, rules):
     for infile in infiles:
         code_tuple = [] 
         code = infile.readlines()
@@ -53,20 +50,24 @@ def analyze(infiles):
         for line in code:
             length += 1
             code_tuple.append((line,length))
-    clean_code = multi_comment_remover(code_tuple) 
-    print(clean_code)
-    print('done with analysis.')
+    clean_code = multi_comment_remover(code_tuple) #all comments now ignored
+    
+    for line in clean_code:
+        line_number = line[1]
+        code = re.split(r'\W+', line[0])
+        for word in code:
+            if word in rules:
+                logging.warning('line '+str(line_number)+': '+word+' used.')
+
 
 if __name__ == "__main__":
     infiles = parse_args()
     rules = c_ruleset.ruleset()
-    '''
-    for key in rules:
-        print(key)
-    '''
     #infiles, outfile = parse_args()
     #print(outfile.readall())
     logging.basicConfig(level=logging.WARNING)
-    analyze(infiles)
+    logging.warning('started analysis')
+    analyze(infiles, rules)
+    logging.warning('done with analysis.')
 
 

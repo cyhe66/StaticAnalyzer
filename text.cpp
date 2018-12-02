@@ -35,5 +35,8 @@ int main(int argc, char** argv) {
 	assert(rc == 0);
 	close(fd);
 	strcpy();
+	lstrcat();
+	strcat();
+	_tcsncpy();
 	memcpy();
 }
