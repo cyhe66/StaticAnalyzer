@@ -54,10 +54,48 @@ def analyze(infiles, rules):
     
     for line in clean_code:
         line_number = line[1]
+        #print(line)
+        '''
         code = re.split(r'\W+', line[0])
         for word in code:
             if word in rules:
                 logging.warning('line '+str(line_number)+': '+word+' used.')
+        '''
+    return clean_code
+
+# returns the line number of the mmap and munmap, as well as the variable that
+# is associated
+def pair_finder(code_tuple):
+    open_var = 'mmap'
+    close_var = 'munmap'
+
+    for tup in code_tuple:
+        #print(re.match(r'.+\Wmmap\W.+', tup[0]))
+        regex_str = r".+\W" + open_var + r"\W.+"
+        print(re.match(regex_str, tup[0]))
+    
+
+'''
+function_name -- mmap, malloc
+exit_name -- munmap, free
+start_line -- # to start checking parentheses
+code -- the code tuple [string, line#]
+'''
+
+def word_scope(function_name, exit_name, start_line, code):
+    stack = []
+    print(stack[-1:])
+    segment = code[start_line:]
+    brackets = "{}()"
+    for tup in segment:
+        print(tup[0])
+        for letter in tup[0]:
+            if letter in brackets:
+                stack.append(letter)
+    print(stack)
+
+
+
 
 
 if __name__ == "__main__":
@@ -67,7 +105,9 @@ if __name__ == "__main__":
     #print(outfile.readall())
     logging.basicConfig(level=logging.WARNING)
     logging.warning('started analysis')
-    analyze(infiles, rules)
+    clean_code = analyze(infiles, rules)
     logging.warning('done with analysis.')
+    pair_finder(clean_code)
+    #word_scope(1,2,28,clean_code)
 
 
