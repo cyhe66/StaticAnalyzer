@@ -52,6 +52,12 @@ def analyze(infiles, rules):
             code_tuple.append((line,length))
     clean_code = multi_comment_remover(code_tuple) #all comments now ignored
     
+    vars = {} #entries look like: {name: (type, value, isModified, size (if buffer/array))}
+    #look for variable assignment, from https://stackoverflow.com/questions/12993187/regular-expression-to-recognize-variable-declarations-in-c
+    assignment = re.compile(r'\b(?:(auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+)(?:\s+\*?\*?\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*[\[;=]') 
+    #look for variable reassignment
+    reassignment = re.compile(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(\[\d+\])?\s*[=+\-/\*]')
+    
     for line in clean_code:
         line_number = line[1]
         #print(line)
@@ -61,6 +67,18 @@ def analyze(infiles, rules):
             if word in rules:
                 logging.warning('line '+str(line_number)+': '+word+' used.')
         '''
+        """
+            if m = assignment.match(word):
+                type = m.group(1)
+                name = word after type (if not a declaration/initialization, skip)
+                if name followed by [ (array/buffer):
+                    size = number after [ (if variable, lookup value)
+                if next is =:
+                    value = number after '='
+                elif next is ;:
+                    value = 0
+                vars[name] = (type, value, False, size?)
+            """
     return clean_code
 
 # returns the line number of the mmap and munmap, as well as the variable that
