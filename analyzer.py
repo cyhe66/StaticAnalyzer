@@ -5,6 +5,8 @@ import sys
 import re
 import c_ruleset
 
+vars = {} #entries look like: {name: (type, value, isModified, size (if buffer/array))}
+
 def parse_args():
     parser = argparse.ArgumentParser(description='Process c source code.')
     parser.add_argument('infile', nargs='+', type=argparse.FileType('r'), default=sys.stdin)
@@ -27,7 +29,17 @@ def multi_comment_remover(code_tuple):
     clean_code = []
     in_comment = False
     for line in code_tuple:
-        line  = (single_comment_remover(line[0]), line[1]) # string, line#
+        line  = [single_comment_remover(line[0]), line[1]] # string, line#
+        #remove leading whitespace from line
+        # line[0] = "new"
+        # print("line #", line[1], ": ", line[0])
+        for char in line[0]:
+            # print("char: ", char)
+            if char in '\t\n\f\r\v ':
+                line[0] = line[0][1:]
+            else:
+                # print("break")
+                break
         #if in between comment
         if '*/' not in line[0] and in_comment:
             line = (' \n', line[1])
@@ -49,10 +61,8 @@ def analyze(infiles, rules):
         length = 0
         for line in code:
             length += 1
-            code_tuple.append((line,length))
+            code_tuple.append([line,length])
     clean_code = multi_comment_remover(code_tuple) #all comments now ignored
-    
-    vars = {} #entries look like: {name: (type, value, isModified, size (if buffer/array))}
     
     #look for variable declaration: 'type name;'
     declaration = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[\d+\])?\s*;') 
@@ -115,10 +125,6 @@ def word_scope(function_name, exit_name, start_line, code):
                 stack.append(letter)
     print(stack)
 
-
-
-
-
 if __name__ == "__main__":
     infiles = parse_args()
     rules = c_ruleset.ruleset()
@@ -128,7 +134,7 @@ if __name__ == "__main__":
     logging.warning('started analysis')
     clean_code = analyze(infiles, rules)
     logging.warning('done with analysis.')
-    pair_finder(clean_code)
+    # pair_finder(clean_code)
     #word_scope(1,2,28,clean_code)
-
+    print (clean_code)
 
