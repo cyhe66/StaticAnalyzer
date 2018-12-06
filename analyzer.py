@@ -53,10 +53,13 @@ def analyze(infiles, rules):
     clean_code = multi_comment_remover(code_tuple) #all comments now ignored
     
     vars = {} #entries look like: {name: (type, value, isModified, size (if buffer/array))}
-    #look for variable assignment, from https://stackoverflow.com/questions/12993187/regular-expression-to-recognize-variable-declarations-in-c
-    assignment = re.compile(r'\b(?:(auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+)(?:\s+\*?\*?\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*[\[;=]') 
-    #look for variable reassignment
-    reassignment = re.compile(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(\[\d+\])?\s*[=+\-/\*]')
+    
+    #look for variable declaration: 'type name;'
+    declaration = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[\d+\])?\s*;') 
+    #look for variable initialization: 'type name = value'
+    initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[\d+\])?\s*=\s*(?P<value>\w*)') 
+    #look for variable reassignment: (name [+-/*]= value)
+    reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[\d+\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
     
     for line in clean_code:
         line_number = line[1]
