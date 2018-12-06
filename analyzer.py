@@ -31,14 +31,10 @@ def multi_comment_remover(code_tuple):
     for line in code_tuple:
         line  = [single_comment_remover(line[0]), line[1]] # string, line#
         #remove leading whitespace from line
-        # line[0] = "new"
-        # print("line #", line[1], ": ", line[0])
         for char in line[0]:
-            # print("char: ", char)
             if char in '\t\n\f\r\v ':
                 line[0] = line[0][1:]
             else:
-                # print("break")
                 break
         #if in between comment
         if '*/' not in line[0] and in_comment:
