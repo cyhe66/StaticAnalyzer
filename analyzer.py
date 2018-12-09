@@ -75,9 +75,9 @@ def analyze(infiles, rules):
         if declaration.match(line[0]):
             print (declaration.match(line[0]), line[1])
         '''
-        if initialization.match(line[0]):
+        #if initialization.match(line[0]):
             #init fits the mould of - 
-            print (initialization.match(line[0]).group(0).split())
+            #print (initialization.match(line[0]).group(0).split())
         #print(initialization.match(line[0]))    #print(line))
         '''
         code = re.split(r'\W+', line[0])
@@ -96,22 +96,26 @@ def analyze(infiles, rules):
                 elif next is ;:
                     value = 0
                 vars[name] = (type, value, False, size?)
-            """
+        """
     return clean_code
 
 # returns the line number of the mmap and munmap, as well as the variable that
 # is associated
+'''
+NOTE: unneccessary if line dictionary works rn
 def pair_finder(code_tuple):
     open_var = 'mmap'
     close_var = 'munmap'
 
     for tup in code_tuple:
         #print(re.match(r'.+\Wmmap\W.+', tup[0]))
-        regex_str = r".+\W" + open_var + r"\W.+"
-        print(re.match(regex_str, tup[0]))
-    
+        open_re = r".+\W" + open_var + r"\W.+"
+        close_re = r".+\W" + close_var + r"\W.+"
+       
+        open_line = tup[1] if re.match(open_re, tup[0]) != None else next
+        close_line = tup[1] if re.match(close_re, tup[0]) != None else next
+    print(open_line, close_line)
 
-'''
 function_name -- mmap, malloc
 exit_name -- munmap, free
 start_line -- # to start checking parentheses
@@ -120,14 +124,22 @@ code -- the code tuple [string, line#]
 
 def word_scope(function_name, exit_name, start_line, code):
     stack = []
-    print(stack[-1:])
-    segment = code[start_line:]
-    brackets = "{}()"
+    end_line = 35
+    segment = code[start_line:end_line]
+    open_brackets = "{("
+    close_brackets = "})"
     for tup in segment:
-        print(tup[0])
         for letter in tup[0]:
-            if letter in brackets:
+            if letter in open_brackets:
                 stack.append(letter)
+            if letter in close_brackets:
+                print(letter)
+                if letter == "}" and stack[-1] == "{":
+                    stack.pop()
+                if letter == ")" and stack[-1] == "(":
+                    stack.pop()
+        if 'munmap' in tup[0]:
+            print(tup)
     print(stack)
 
 if __name__ == "__main__":
@@ -139,7 +151,7 @@ if __name__ == "__main__":
     logging.warning('started analysis')
     clean_code = analyze(infiles, rules)
     logging.warning('done with analysis.')
-    # pair_finder(clean_code)
-    #word_scope(1,2,28,clean_code)
+    #pair_finder(clean_code)
+    word_scope('mmap','munmap',30,clean_code)
     #print (clean_code)
 
