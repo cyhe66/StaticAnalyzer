@@ -5,8 +5,6 @@ import sys
 import re
 import c_ruleset
 
-vars = {} #entries look like: {name: (type, value, isModified, size (if buffer/array))}
-
 def parse_args():
     parser = argparse.ArgumentParser(description='Process c source code.')
     parser.add_argument('infile', nargs='+', type=argparse.FileType('r'), default=sys.stdin)
@@ -30,23 +28,25 @@ def multi_comment_remover(code_tuple):
     in_comment = False
     for line in code_tuple:
         line  = [single_comment_remover(line[0]), line[1]] # string, line#
+        #if in between comment
+        if '*/' not in line[0] and in_comment:
+            line = [' \n', line[1]]
+        #if code before comment
+        if '/*' in line[0]:
+            in_comment = True
+            line = [line[0][:line[0].find('/*',0)], line[1]]
+        #if code after comment
+        if '*/' in line[0] and in_comment:
+            line = [line[0][line[0].find('*/',0)+2:], line[1]]
+            in_comment = False
+
         #remove leading whitespace from line
         for char in line[0]:
             if char in '\t\n\f\r\v ':
                 line[0] = line[0][1:]
             else:
                 break
-        #if in between comment
-        if '*/' not in line[0] and in_comment:
-            line = (' \n', line[1])
-        #if code before comment
-        if '/*' in line[0]:
-            in_comment = True
-            line = (line[0][:line[0].find('/*',0)], line[1])
-        #if code after comment
-        if '*/' in line[0] and in_comment:
-            line = (line[0][line[0].find('*/',0)+2:], line[1])
-            in_comment = False
+                
         clean_code.append(line)
     return clean_code 
 
@@ -61,13 +61,14 @@ def analyze(infiles, rules):
     clean_code = multi_comment_remover(code_tuple) #all comments now ignored
     
     #look for variable declaration: 'type name;'
-    declaration = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[\d+\])?\s*;') 
+    declaration = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*;') 
     #look for variable initialization: 'type name = value'
-    initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[\d+\])?\s*=\s*(?P<value>\w*)') 
+    initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*=\s*(?P<value>\w*)') 
     #look for variable reassignment: (name [+-/*]= value)
-    reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[\d+\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
-   
+    reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
+    var_dict = {} #entries look like: {name: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}
     for line in clean_code:
+<<<<<<< HEAD
         init_dict = {}
         declar_dict = {}
         #line_number = line[1]
@@ -79,6 +80,34 @@ def analyze(infiles, rules):
             #init fits the mould of - 
             #print (initialization.match(line[0]).group(0).split())
         #print(initialization.match(line[0]))    #print(line))
+=======
+        d = declaration.match(line[0])
+        if d:
+            size = None
+            val = 0
+            if d.group('size'):
+                size = d.group('size')
+                val = [0]*size
+
+            var_dict[d.group('name')] = (d.group('type'), val, line[1], False, None, size)
+
+        m = initialization.match(line[0])
+        if m:
+            # print ("type: ", m.group('type'), ", variable: ", m.group('name'), ", value: ", m.group('value'))
+            size = None
+            if m.group('size'):
+                size = d.group('size')
+            var_dict[m.group('name')] = (m.group('type'), m.group('value'), line[1], False, None, size)
+
+        r = reassignment.match(line[0])
+        if r and r.group('name') in var_dict:
+            name = r.group('name')
+            var_type = var_dict[name][0]
+            first_line = var_dict[name][2]
+            var_size = var_dict[name][-1]
+            var_dict[name] = (var_type, r.group('value'), first_line, True, line[1], var_size)
+        
+>>>>>>> 6fc88862b3f35299d6dcbc795453f5cd019b811a
         '''
         code = re.split(r'\W+', line[0])
         for word in code:
@@ -96,7 +125,13 @@ def analyze(infiles, rules):
                 elif next is ;:
                     value = 0
                 vars[name] = (type, value, False, size?)
+<<<<<<< HEAD
         """
+=======
+            """
+    print(var_dict)
+    print(clean_code)
+>>>>>>> 6fc88862b3f35299d6dcbc795453f5cd019b811a
     return clean_code
 
 # returns the line number of the mmap and munmap, as well as the variable that

@@ -21,6 +21,7 @@ comment
 int j;/*and another one-
 right here*/ int k;
 int l;
+l = 12;
 int main(int argc, char** argv) {
 	size_t filesize = getFilesize(argv[1]);
 	//Open file
@@ -37,6 +38,7 @@ int main(int argc, char** argv) {
 	close(fd);
 	strcpy();
 	lstrcat();
+	k = 0;
 	strcat();
 	_tcsncpy();
 	memcpy();
