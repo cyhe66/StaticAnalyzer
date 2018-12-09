@@ -61,15 +61,24 @@ def analyze(infiles, rules):
     clean_code = multi_comment_remover(code_tuple) #all comments now ignored
     
     #look for variable declaration: 'type name;'
-    declaration = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[\d+\])?\s*;') 
+    declaration = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[\d+\])?\s*;') 
     #look for variable initialization: 'type name = value'
-    initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[\d+\])?\s*=\s*(?P<value>\w*)') 
+    initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[\d+\])?\s*=\s*(?P<value>\w*)') 
     #look for variable reassignment: (name [+-/*]= value)
     reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[\d+\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
-    
+   
     for line in clean_code:
-        line_number = line[1]
-        #print(line)
+        init_dict = {}
+        declar_dict = {}
+        #line_number = line[1]
+        '''
+        if declaration.match(line[0]):
+            print (declaration.match(line[0]), line[1])
+        '''
+        if initialization.match(line[0]):
+            #init fits the mould of - 
+            print (initialization.match(line[0]).group(0).split())
+        #print(initialization.match(line[0]))    #print(line))
         '''
         code = re.split(r'\W+', line[0])
         for word in code:
@@ -132,5 +141,5 @@ if __name__ == "__main__":
     logging.warning('done with analysis.')
     # pair_finder(clean_code)
     #word_scope(1,2,28,clean_code)
-    print (clean_code)
+    #print (clean_code)
 
