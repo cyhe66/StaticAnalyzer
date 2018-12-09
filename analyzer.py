@@ -5,8 +5,6 @@ import sys
 import re
 import c_ruleset
 
-vars = {} #entries look like: {name: (type, value, isModified, size (if buffer/array))}
-
 def parse_args():
     parser = argparse.ArgumentParser(description='Process c source code.')
     parser.add_argument('infile', nargs='+', type=argparse.FileType('r'), default=sys.stdin)
@@ -61,24 +59,38 @@ def analyze(infiles, rules):
     clean_code = multi_comment_remover(code_tuple) #all comments now ignored
     
     #look for variable declaration: 'type name;'
-    declaration = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[\d+\])?\s*;') 
+    declaration = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*;') 
     #look for variable initialization: 'type name = value'
-    initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[\d+\])?\s*=\s*(?P<value>\w*)') 
+    initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*=\s*(?P<value>\w*)') 
     #look for variable reassignment: (name [+-/*]= value)
-    reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[\d+\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
-   
+    reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
+    var_dict = {} #entries look like: {name: (type, value, isModified, line_modified (if modified) size (if buffer/array))}
     for line in clean_code:
-        init_dict = {}
-        declar_dict = {}
-        #line_number = line[1]
-        '''
-        if declaration.match(line[0]):
-            print (declaration.match(line[0]), line[1])
-        '''
-        if initialization.match(line[0]):
-            #init fits the mould of - 
-            print (initialization.match(line[0]).group(0).split())
-        #print(initialization.match(line[0]))    #print(line))
+        d = declaration.match(line[0])
+        if d:
+            size = None
+            val = 0
+            if d.group('size'):
+                size = d.group('size')
+                val = [0]*size
+
+            var_dict[d.group('name')] = (d.group('type'), val, False, None, size)
+
+        m = initialization.match(line[0])
+        if m:
+            # print ("type: ", m.group('type'), ", variable: ", m.group('name'), ", value: ", m.group('value'))
+            size = None
+            if m.group('size'):
+                size = d.group('size')
+            var_dict[m.group('name')] = (m.group('type'), m.group('value'), False, None, size)
+
+        r = reassignment.match(line[0])
+        if r and r.group('name') in var_dict:
+            name = r.group('name')
+            var_type = var_dict[name][0]
+            var_size = var_dict[name][4]
+            var_dict[name] = (var_type, r.group('value'), True, line[1], var_size)
+        
         '''
         code = re.split(r'\W+', line[0])
         for word in code:
@@ -97,6 +109,7 @@ def analyze(infiles, rules):
                     value = 0
                 vars[name] = (type, value, False, size?)
             """
+    print(var_dict)
     return clean_code
 
 # returns the line number of the mmap and munmap, as well as the variable that
