@@ -61,26 +61,24 @@ def analyze(infiles, rules):
     clean_code = multi_comment_remover(code_tuple) #all comments now ignored
     
     #look for variable declaration: 'type name;'
-    declaration = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*;') 
+    declaration = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|'
+        r'volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|'
+        r'complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*;') 
     #look for variable initialization: 'type name = value'
-    initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*=\s*(?P<value>\w*)') 
+    initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|'
+        r'volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)'
+        r'+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*=\s*(?P<value>\w*)') 
     #look for variable reassignment: (name [+-/*]= value)
     reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
+   
+    #look for function call: function(params)
+    function_match = re.compile(r'[\w]*\s*(?P<var>([\w]*))\s*[=]*\s*(?P<funct>([\w]*))\s*\((?P<args>[^)]+)\)')
+
+    print('entries look like: {variable: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}')
     var_dict = {} #entries look like: {name: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}
+    function_dict = {} #entries look like {function: (# of params, param_list)}
+
     for line in clean_code:
-<<<<<<< HEAD
-        init_dict = {}
-        declar_dict = {}
-        #line_number = line[1]
-        '''
-        if declaration.match(line[0]):
-            print (declaration.match(line[0]), line[1])
-        '''
-        #if initialization.match(line[0]):
-            #init fits the mould of - 
-            #print (initialization.match(line[0]).group(0).split())
-        #print(initialization.match(line[0]))    #print(line))
-=======
         d = declaration.match(line[0])
         if d:
             size = None
@@ -89,7 +87,7 @@ def analyze(infiles, rules):
                 size = d.group('size')
                 val = [0]*size
 
-            var_dict[d.group('name')] = (d.group('type'), val, line[1], False, None, size)
+            var_dict[d.group('name')] = (d.group('type'), val, line[1], False, None, size, [])
 
         m = initialization.match(line[0])
         if m:
@@ -97,7 +95,7 @@ def analyze(infiles, rules):
             size = None
             if m.group('size'):
                 size = d.group('size')
-            var_dict[m.group('name')] = (m.group('type'), m.group('value'), line[1], False, None, size)
+            var_dict[m.group('name')] = (m.group('type'), m.group('value'), line[1], False, None, size, [])
 
         r = reassignment.match(line[0])
         if r and r.group('name') in var_dict:
@@ -105,9 +103,15 @@ def analyze(infiles, rules):
             var_type = var_dict[name][0]
             first_line = var_dict[name][2]
             var_size = var_dict[name][-1]
-            var_dict[name] = (var_type, r.group('value'), first_line, True, line[1], var_size)
+            var_dict[name] = (var_type, r.group('value'), first_line, True, line[1], var_size, [])
+
+        f = function_match.match(line[0])
+        if f:
+            print('var:',f.group('var'), '| function:',f.group('funct'), '| args:',f.group('args'))
+            arguments = f.group('args').split(')
+            print(arguments)
+
         
->>>>>>> 6fc88862b3f35299d6dcbc795453f5cd019b811a
         '''
         code = re.split(r'\W+', line[0])
         for word in code:
@@ -125,41 +129,15 @@ def analyze(infiles, rules):
                 elif next is ;:
                     value = 0
                 vars[name] = (type, value, False, size?)
-<<<<<<< HEAD
         """
-=======
-            """
     print(var_dict)
-    print(clean_code)
->>>>>>> 6fc88862b3f35299d6dcbc795453f5cd019b811a
     return clean_code
 
 # returns the line number of the mmap and munmap, as well as the variable that
 # is associated
-'''
-NOTE: unneccessary if line dictionary works rn
-def pair_finder(code_tuple):
-    open_var = 'mmap'
-    close_var = 'munmap'
-
-    for tup in code_tuple:
-        #print(re.match(r'.+\Wmmap\W.+', tup[0]))
-        open_re = r".+\W" + open_var + r"\W.+"
-        close_re = r".+\W" + close_var + r"\W.+"
-       
-        open_line = tup[1] if re.match(open_re, tup[0]) != None else next
-        close_line = tup[1] if re.match(close_re, tup[0]) != None else next
-    print(open_line, close_line)
-
-function_name -- mmap, malloc
-exit_name -- munmap, free
-start_line -- # to start checking parentheses
-code -- the code tuple [string, line#]
-'''
-
 def word_scope(function_name, exit_name, start_line, code):
     stack = []
-    end_line = 35
+    end_line = 36
     segment = code[start_line:end_line]
     open_brackets = "{("
     close_brackets = "})"
@@ -168,14 +146,17 @@ def word_scope(function_name, exit_name, start_line, code):
             if letter in open_brackets:
                 stack.append(letter)
             if letter in close_brackets:
-                print(letter)
                 if letter == "}" and stack[-1] == "{":
                     stack.pop()
                 if letter == ")" and stack[-1] == "(":
                     stack.pop()
-        if 'munmap' in tup[0]:
-            print(tup)
-    print(stack)
+        close_re = r".+\W" + exit_name + r"\W.+"
+
+        #but this could just be any instance of munmap
+        if re.match(close_re, tup[0]) != None:  # found an instance of munmap 
+            if len(stack) == 0:
+                print(tup[1])
+
 
 if __name__ == "__main__":
     infiles = parse_args()
