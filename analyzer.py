@@ -108,7 +108,7 @@ def analyze(infiles, rules):
         f = function_match.match(line[0])
         if f:
             print('var:',f.group('var'), '| function:',f.group('funct'), '| args:',f.group('args'))
-            arguments = f.group('args').split(')
+            arguments = f.group('args').split('')
             print(arguments)
 
         
