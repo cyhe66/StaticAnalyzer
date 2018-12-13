@@ -72,7 +72,7 @@ def analyze(infiles, rules):
     reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
    
     #look for function call: function(params)
-    function_match = re.compile(r'[\w]*\s*(?P<var>([\w]*))\s*[=]*\s*(?P<funct>([\w]*))\s*\((?P<args>[^)]+)\)')
+    function_match = re.compile(r'[\w]*\s*(?P<var>([\w]*?))\s*([=]|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>[^)]+)\)')
 
     print('entries look like: {variable: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}')
     var_dict = {} #entries look like: {name: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}
@@ -87,7 +87,7 @@ def analyze(infiles, rules):
                 size = d.group('size')
                 val = [0]*size
 
-            var_dict[d.group('name')] = (d.group('type'), val, line[1], False, None, size, [])
+            var_dict[d.group('name')] = (d.group('type').strip(), val, line[1], False, None, size, [])
 
         m = initialization.match(line[0])
         if m:
@@ -95,7 +95,7 @@ def analyze(infiles, rules):
             size = None
             if m.group('size'):
                 size = d.group('size')
-            var_dict[m.group('name')] = (m.group('type'), m.group('value'), line[1], False, None, size, [])
+            var_dict[m.group('name')] = (m.group('type').strip(), m.group('value'), line[1], False, None, size, [])
 
         r = reassignment.match(line[0])
         if r and r.group('name') in var_dict:
@@ -103,15 +103,16 @@ def analyze(infiles, rules):
             var_type = var_dict[name][0]
             first_line = var_dict[name][2]
             var_size = var_dict[name][-1]
-            var_dict[name] = (var_type, r.group('value'), first_line, True, line[1], var_size, [])
+            var_dict[name] = (var_type, r.group('value').strip(), first_line, True, line[1], var_size, [])
 
         f = function_match.match(line[0])
         if f:
-            print('var:',f.group('var'), '| function:',f.group('funct'), '| args:',f.group('args'))
             arguments = f.group('args').split(',')
-            print(arguments)
+            #print(map(str.strip, arguments))
+            argts = [item.strip() for item in arguments]
+            #print(argts)
+            print('var:',f.group('var'), '| function:',f.group('funct'), '| argts:',argts)
 
-        
         '''
         code = re.split(r'\W+', line[0])
         for word in code:
