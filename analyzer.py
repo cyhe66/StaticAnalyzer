@@ -72,11 +72,19 @@ def analyze(infiles, rules):
     reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
    
     #look for function call: function(params)
-    function_match = re.compile(r'[\w]*\s*(?P<var>([\w]*?))\s*([=]|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>[^)]+)\)')
+    #function_match = re.compile(r'(?P<type>[\w|*]*)\s*(?P<var>([\w]*?))\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>[^)]+)\)')
+    function_match = re.compile(r'\s*(?P<var>([\w]*?))\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>(.+))\)')
 
     print('entries look like: {variable: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}')
     var_dict = {} #entries look like: {name: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}
     function_dict = {} #entries look like {function: (# of params, param_list)}
+
+    c_keywords = ['auto', 'const', 'double', 'float', 'int', 'short', 
+                    'struct', 'unsigned', 'break', 'continue', 'else', 
+                    'for', 'long', 'signed', 'switch', 'void', 'case',
+                    'default', 'enum', 'goto', 'register', 'sizeof', 
+                    'typedef', 'volatile', 'char', 'do', 'extern', 'if', 
+                    'return', 'static', 'union', 'while']
 
     for line in clean_code:
         d = declaration.match(line[0])
@@ -111,8 +119,13 @@ def analyze(infiles, rules):
             #print(map(str.strip, arguments))
             argts = [item.strip() for item in arguments]
             #print(argts)
-            print('var:',f.group('var'), '| function:',f.group('funct'), '| argts:',argts)
-
+            if f.group('funct') not in c_keywords:
+                #create a key entry for the function function_line#_char#
+                key = f.group('funct')+"_"+str(line[1])+"_"+str(line[0].find(f.group('funct')))
+                function_dict[key] = argts
+                #print(key)
+                #print(line[1],'var:',f.group('var'), '| function:',f.group('funct'), '| argts:',argts)
+            print(function_dict) 
         '''
         code = re.split(r'\W+', line[0])
         for word in code:
@@ -136,9 +149,9 @@ def analyze(infiles, rules):
 
 # returns the line number of the mmap and munmap, as well as the variable that
 # is associated
-def word_scope(function_name, exit_name, start_line, code):
+def word_scope(function_name, exit_name, start_line, end_line, code):
     stack = []
-    end_line = 36
+    #end_line = 75
     segment = code[start_line:end_line]
     open_brackets = "{("
     close_brackets = "})"
@@ -152,12 +165,14 @@ def word_scope(function_name, exit_name, start_line, code):
                 if letter == ")" and stack[-1] == "(":
                     stack.pop()
         close_re = r".+\W" + exit_name + r"\W.+"
-
         #but this could just be any instance of munmap
-        if re.match(close_re, tup[0]) != None:  # found an instance of munmap 
-            if len(stack) == 0:
-                print(tup[1])
-
+    if re.match(close_re, tup[0]) != None:  # found an instance of munmap 
+        if len(stack) == 0:
+            print(tup[1])
+        else:
+            print('Stack unresolved: ', stack,' at line :', tup[1])
+            print(tup[0])
+            print(tup[0].find('munmap'))
 
 if __name__ == "__main__":
     infiles = parse_args()
@@ -169,6 +184,6 @@ if __name__ == "__main__":
     clean_code = analyze(infiles, rules)
     logging.warning('done with analysis.')
     #pair_finder(clean_code)
-    word_scope('mmap','munmap',30,clean_code)
+    word_scope('mmap','munmap',60,75,clean_code)
     #print (clean_code)
 
