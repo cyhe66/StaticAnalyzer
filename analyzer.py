@@ -3,14 +3,49 @@ import argparse
 import getopt
 import sys
 import re
-import c_ruleset
+
+#look for variable declaration: 'type name;'
+declaration = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|'
+    r'volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|'
+    r'complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*;') 
+#look for variable initialization: 'type name = value'
+initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|'
+    r'volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)'
+    r'+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*=\s*(?P<value>\w*)') 
+#look for variable reassignment: (name [+-/*]= value)
+reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
+
+#look for function call: var = function(params)
+#function_match = re.compile(r'(?P<type>[\w|*]*)\s*(?P<var>([\w]*?))\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>[^)]+)\)')
+function_match = re.compile(r'\s*(?P<var>([\w]*?))\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>(.+))\)')
+
+var_dict = {} #entries look like: {name: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}
+function_dict = {} #entries look like {function: (# of params, param_list)}
+
+c_keywords = ['auto', 'const', 'double', 'float', 'int', 'short', 
+                'struct', 'unsigned', 'break', 'continue', 'else', 
+                'for', 'long', 'signed', 'switch', 'void', 'case',
+                'default', 'enum', 'goto', 'register', 'sizeof', 
+                'typedef', 'volatile', 'char', 'do', 'extern', 'if', 
+                'return', 'static', 'union', 'while']
+
+ms_banned = ["strcpy", "strcpyA", "strcpyW", "StrCpy", "StrCpyA", "lstrcpyA", 
+                "lstrcpyW", "_tccpy", "_mbccpy", "_ftcscpy", "_mbsncpy", "StrCpyN", 
+                "StrCpyNA", "StrCpyNW", "StrNCpy", "strcpynA", "StrNCpyA", "StrNCpyW", 
+                "lstrcpynA", "lstrcpynW","lstrcpy", "wcscpy", "_tcscpy", "_mbscpy", 
+                "strcat", "lstrcat", "wcscat", "_tcscat", "_mbscat", "StrCat", "StrCatA",
+                "StrcatW", "lstrcatA", "lstrcatW", "strCatBuff", "StrCatBuffA", "StrCatBuffW", 
+                "StrCatChainW", "_tccat", "_mbccat", "_ftcsat", "StrCatN", "StrCatNA", 
+                "StrCatNW", "StrNCat", "StrNCatA", "StrNCatW", "lstrncat", "lstrcatnA", 
+                "lstrcatnW", "strncpy", "lstrcpyn", "wcsncpy", "_tcsncpy", "_mbsnbcpy",
+                "strncat","lstrcatn", "wcsncat", "_tcsncat", "_mbsnbcat"]
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Process c source code.')
     parser.add_argument('infile', nargs='+', type=argparse.FileType('r'), default=sys.stdin)
-    #parser.add_argument('-o', dest='outfile', nargs='?', type=argparse.FileType('w'), default=sys.stdout)
+    parser.add_argument('-o', dest='outfile', nargs='?', type=argparse.FileType('w'), default=sys.stdout)
     args = parser.parse_args()
-    return args.infile #args.outfile
+    return args.infile, args.outfile
 
 def single_comment_remover(text):
     def replacer(match):
@@ -48,9 +83,54 @@ def multi_comment_remover(code_tuple):
                 break
                 
         clean_code.append(line)
-    return clean_code 
+    return clean_code
 
-def analyze(infiles, rules):
+def find_vars(line, linenum):
+    d = declaration.match(line)
+    if d:
+        size = None
+        val = 0
+        if d.group('size'):
+            size = d.group('size')
+            val = [0]*size
+
+        var_dict[d.group('name')] = (d.group('type').strip(), val, linenum, False, None, size, [])
+
+    m = initialization.match(line)
+    if m:
+        size = None
+        if m.group('size'):
+            size = d.group('size')
+        var_dict[m.group('name')] = (m.group('type').strip(), m.group('value'), linenum, False, None, size, [])
+
+    r = reassignment.match(line)
+    if r and r.group('name') in var_dict:
+        name = r.group('name')
+        var_type = var_dict[name][0]
+        first_line = var_dict[name][2]
+        var_size = var_dict[name][-1]
+        var_dict[name] = (var_type, r.group('value').strip(), first_line, True, linenum, var_size, [])
+
+def find_functions(line, linenum):
+    f = function_match.match(line)
+    if f:
+        arguments = f.group('args').split(',')
+        argts = [item.strip() for item in arguments]
+        function = f.group('funct')
+        # print("funtion: ", function, "line: ", linenum)
+        if function not in c_keywords:
+            #create a key entry for the function function_line#_char#
+            key = function+"_"+str(linenum)+"_"+str(line.find(function))
+            function_dict[key] = argts
+
+def find_banned(line, linenum):
+    #check for ms_banned funcitons
+    for word in re.split(r'\W+', line):
+        if word in ms_banned:
+            outfile.writelines("Line " + str(linenum) + ": " + word + "\n")
+            outfile.writelines("WARNING: This function is on the Microsoft 'banned list' due to known security flaws. See https://msdn.microsoft.com/en-us/library/bb288454.aspx for a suggested replacement.\n")
+
+def analyze(infiles, outfile):
     for infile in infiles:
         code_tuple = [] 
         code = infile.readlines()
@@ -59,92 +139,15 @@ def analyze(infiles, rules):
             length += 1
             code_tuple.append([line,length])
     clean_code = multi_comment_remover(code_tuple) #all comments now ignored
-    
-    #look for variable declaration: 'type name;'
-    declaration = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|'
-        r'volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|'
-        r'complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*;') 
-    #look for variable initialization: 'type name = value'
-    initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|'
-        r'volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)'
-        r'+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*=\s*(?P<value>\w*)') 
-    #look for variable reassignment: (name [+-/*]= value)
-    reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
-   
-    #look for function call: function(params)
-    #function_match = re.compile(r'(?P<type>[\w|*]*)\s*(?P<var>([\w]*?))\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>[^)]+)\)')
-    function_match = re.compile(r'\s*(?P<var>([\w]*?))\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>(.+))\)')
-
-    print('entries look like: {variable: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}')
-    var_dict = {} #entries look like: {name: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}
-    function_dict = {} #entries look like {function: (# of params, param_list)}
-
-    c_keywords = ['auto', 'const', 'double', 'float', 'int', 'short', 
-                    'struct', 'unsigned', 'break', 'continue', 'else', 
-                    'for', 'long', 'signed', 'switch', 'void', 'case',
-                    'default', 'enum', 'goto', 'register', 'sizeof', 
-                    'typedef', 'volatile', 'char', 'do', 'extern', 'if', 
-                    'return', 'static', 'union', 'while']
 
     for line in clean_code:
-        d = declaration.match(line[0])
-        if d:
-            size = None
-            val = 0
-            if d.group('size'):
-                size = d.group('size')
-                val = [0]*size
-
-            var_dict[d.group('name')] = (d.group('type').strip(), val, line[1], False, None, size, [])
-
-        m = initialization.match(line[0])
-        if m:
-            # print ("type: ", m.group('type'), ", variable: ", m.group('name'), ", value: ", m.group('value'))
-            size = None
-            if m.group('size'):
-                size = d.group('size')
-            var_dict[m.group('name')] = (m.group('type').strip(), m.group('value'), line[1], False, None, size, [])
-
-        r = reassignment.match(line[0])
-        if r and r.group('name') in var_dict:
-            name = r.group('name')
-            var_type = var_dict[name][0]
-            first_line = var_dict[name][2]
-            var_size = var_dict[name][-1]
-            var_dict[name] = (var_type, r.group('value').strip(), first_line, True, line[1], var_size, [])
-
-        f = function_match.match(line[0])
-        if f:
-            arguments = f.group('args').split(',')
-            #print(map(str.strip, arguments))
-            argts = [item.strip() for item in arguments]
-            #print(argts)
-            if f.group('funct') not in c_keywords:
-                #create a key entry for the function function_line#_char#
-                key = f.group('funct')+"_"+str(line[1])+"_"+str(line[0].find(f.group('funct')))
-                function_dict[key] = argts
-                #print(key)
-                #print(line[1],'var:',f.group('var'), '| function:',f.group('funct'), '| argts:',argts)
-            print(function_dict) 
-        '''
-        code = re.split(r'\W+', line[0])
-        for word in code:
-            if word in rules:
-                logging.warning('line '+str(line_number)+': '+word+' used.')
-        '''
-        """
-            if m = assignment.match(word):
-                type = m.group(1)
-                name = word after type (if not a declaration/initialization, skip)
-                if name followed by [ (array/buffer):
-                    size = number after [ (if variable, lookup value)
-                if next is =:
-                    value = number after '='
-                elif next is ;:
-                    value = 0
-                vars[name] = (type, value, False, size?)
-        """
+        find_vars(line[0], line[1])
+        find_functions(line[0], line[1])
+        find_banned(line[0], line[1])
+        
+            
     print(var_dict)
+    print(function_dict)
     return clean_code
 
 # returns the line number of the mmap and munmap, as well as the variable that
@@ -175,15 +178,15 @@ def word_scope(function_name, exit_name, start_line, end_line, code):
             print(tup[0].find('munmap'))
 
 if __name__ == "__main__":
-    infiles = parse_args()
-    rules = c_ruleset.ruleset()
-    #infiles, outfile = parse_args()
+    # infiles = parse_args()
+    # rules = c_ruleset.ruleset()
+    infiles, outfile = parse_args()
     #print(outfile.readall())
     logging.basicConfig(level=logging.WARNING)
     logging.warning('started analysis')
-    clean_code = analyze(infiles, rules)
+    clean_code = analyze(infiles, outfile)
     logging.warning('done with analysis.')
     #pair_finder(clean_code)
-    word_scope('mmap','munmap',60,75,clean_code)
+    # word_scope('mmap','munmap',60,75,clean_code)
     #print (clean_code)
 
