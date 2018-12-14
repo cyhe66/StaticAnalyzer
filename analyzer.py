@@ -4,16 +4,22 @@ import getopt
 import sys
 import re
 
+infiles = None
+outfile = None
+
 #look for variable declaration: 'type name;'
 declaration = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|'
     r'volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|'
-    r'complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*;') 
+    r'complex\s*)+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\w+)\])?\s*;') 
 #look for variable initialization: 'type name = value'
 initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|'
     r'volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)'
-    r'+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*=\s*(?P<value>\w*)') 
+    r'+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\w+)\])?\s*=\s*(?P<value>\w*)') 
+#TODO: declaration/initialization do not catch multiple variables on one line
+#eg: int i, j;
+
 #look for variable reassignment: (name [+-/*]= value)
-reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\d+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
+reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\w+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
 
 #look for function call: var = function(params)
 #function_match = re.compile(r'(?P<type>[\w|*]*)\s*(?P<var>([\w]*?))\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>[^)]+)\)')
@@ -89,19 +95,19 @@ def find_vars(line, linenum):
     d = declaration.match(line)
     if d:
         size = None
-        val = 0
         if d.group('size'):
             size = d.group('size')
-            val = [0]*size
+            uninit_subscript(line, linenum, size)
 
-        var_dict[d.group('name')] = (d.group('type').strip(), val, linenum, False, None, size, [])
+        var_dict[d.group('name')] = (d.group('type').strip(), None, linenum, False, None, size)
 
     m = initialization.match(line)
     if m:
         size = None
         if m.group('size'):
             size = d.group('size')
-        var_dict[m.group('name')] = (m.group('type').strip(), m.group('value'), linenum, False, None, size, [])
+            uninit_subscript(line, linenum, size)
+        var_dict[m.group('name')] = (m.group('type').strip(), m.group('value'), linenum, False, None, size)
 
     r = reassignment.match(line)
     if r and r.group('name') in var_dict:
@@ -109,7 +115,7 @@ def find_vars(line, linenum):
         var_type = var_dict[name][0]
         first_line = var_dict[name][2]
         var_size = var_dict[name][-1]
-        var_dict[name] = (var_type, r.group('value').strip(), first_line, True, linenum, var_size, [])
+        var_dict[name] = (var_type, r.group('value').strip(), first_line, True, linenum, var_size)
 
 def find_functions(line, linenum):
     f = function_match.match(line)
@@ -130,7 +136,12 @@ def find_banned(line, linenum):
             outfile.writelines("Line " + str(linenum) + ": " + word + "\n")
             outfile.writelines("WARNING: This function is on the Microsoft 'banned list' due to known security flaws. See https://msdn.microsoft.com/en-us/library/bb288454.aspx for a suggested replacement.\n")
 
-def analyze(infiles, outfile):
+def uninit_subscript(line, linenum, var):
+    if var in var_dict and var_dict[var][1] == None:
+        outfile.writelines("Line " + str(linenum) + ": " + line)
+        outfile.writelines("WARNING: Using uninitialized value '" + var + "' to initialize array\n")
+
+def analyze():
     for infile in infiles:
         code_tuple = [] 
         code = infile.readlines()
@@ -184,7 +195,7 @@ if __name__ == "__main__":
     #print(outfile.readall())
     logging.basicConfig(level=logging.WARNING)
     logging.warning('started analysis')
-    clean_code = analyze(infiles, outfile)
+    clean_code = analyze()
     logging.warning('done with analysis.')
     #pair_finder(clean_code)
     # word_scope('mmap','munmap',60,75,clean_code)
