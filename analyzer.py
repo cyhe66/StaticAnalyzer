@@ -20,6 +20,7 @@ initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\
 
 #look for variable reassignment: (name [+-/*]= value)
 reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<subscript>\w+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
+#TODO: does not catch: x = x+1 properly
 
 #look for function call: var = function(params)
 function_match = re.compile(r'(?P<type>[\w|*]*?)\s*(?P<var>([\w]*?))\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>(.*))\)')
@@ -102,15 +103,17 @@ def multi_comment_remover(code_tuple):
 
 def find_vars(line, linenum):
     d = declaration.match(line)
+    m = initialization.match(line)
+    r = reassignment.match(line)
+    
     if d:
         size = d.group('size')
         if uninit_size(line, linenum, size):
             size = var_dict[size][-1]
 
         var_dict[d.group('name')] = (d.group('type').strip(), None, linenum, False, None, size)
-
-    m = initialization.match(line)
-    if m:
+    
+    elif m:
         size = m.group('size')
         if uninit_size(line, linenum, size):
             size = var_dict[size][-1]
@@ -118,9 +121,8 @@ def find_vars(line, linenum):
         if value in var_dict:
             value = var_dict[value][1]
         var_dict[m.group('name')] = (m.group('type').strip(), value, linenum, False, None, size)
-
-    r = reassignment.match(line)
-    if r and r.group('name') in var_dict:
+    
+    elif r and r.group('name') in var_dict:
         name = r.group('name')
         var_type = var_dict[name][0]
         first_line = var_dict[name][2]
@@ -155,6 +157,9 @@ def find_banned(line, linenum):     #TODO: implement in find_functions instead??
         elif word in clang_banned:
             outfile.writelines("Line " + str(linenum) + ": " + word + "\n")
             outfile.writelines("WARNING: This function " + clang_banned[word][1] + " Please use " + clang_banned[word][0] + " instead.\n")
+        elif word in ret_check and '=' not in line: # should assign return value to variable, or check == condition
+            outfile.writelines("Line " + str(linenum) + ": " + word + "\n")
+            outfile.writelines("WARNING: Code does not check the return value of '" + word + "'. This could create vulnerabilities. See CWE 252 for more detail.\n")
 
 def uninit_size(line, linenum, var):
     if var in var_dict:
@@ -186,8 +191,8 @@ def analyze():
         find_functions(line[0], line[1])
         find_banned(line[0], line[1])
         
-    #print(var_dict)
-    #print(function_dict)
+    # print(var_dict)
+    print(function_dict)
     return clean_code
 
 # returns the line number of the mmap and munmap, as well as the variable that
