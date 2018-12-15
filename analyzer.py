@@ -123,11 +123,12 @@ def find_functions(line, linenum):
         arguments = f.group('args').split(',')
         argts = [item.strip() for item in arguments]
         function = f.group('funct')
-        # print("funtion: ", function, "line: ", linenum)
-        if function not in c_keywords:
+        
+        #temporarily disabling keywords check
+        #if function not in c_keywords:
             #create a key entry for the function function_line#_char#
-            key = function+"_"+str(linenum)+"_"+str(line.find(function))
-            function_dict[key] = argts
+        key = function+"_"+str(linenum)+"_"+str(line.find(function))
+        function_dict[key] = argts
 
 def find_banned(line, linenum):
     #check for ms_banned funcitons
@@ -157,7 +158,7 @@ def analyze():
         find_banned(line[0], line[1])
         
             
-    print(var_dict)
+    #print(var_dict)
     print(function_dict)
     return clean_code
 
@@ -166,9 +167,15 @@ def analyze():
 def word_scope(function_name, exit_name, start_line, end_line, code, funct_dict):
     stack = []
     #end_line = 75
-    segment = code[start_line:end_line-1]#save special check for the last line
+    segment = code[start_line:end_line-1] #code block except for the close/munmap call
     close_re = r".+\W" + exit_name + r"\W.+"
-    #last_line = 
+    print(code[end_line-1]) #print the close/munmap call
+    #check for if and while
+    check_ifStr = 'if'+'_'+str(end_line)+'_'+str(0)
+    if funct_dict[check_ifStr]:
+        print(funct_dict[check_ifStr])
+    else:
+        print('womp womp')
     open_brackets = "{("
     close_brackets = "})"
     for tup in segment:
@@ -213,6 +220,6 @@ if __name__ == "__main__":
     clean_code = analyze()
     logging.warning('done with analysis.')
     #pair_finder(clean_code)
-    # word_scope('mmap','munmap',60,75,clean_code)
+    word_scope('mmap','munmap',60,75,clean_code, function_dict)
     #print (clean_code)
 
