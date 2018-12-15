@@ -24,6 +24,8 @@ int a[j];
 int x = a[j];
 int l;
 l = 12;
+int x;
+
 int main(int argc, char** argv) {
 	size_t filesize = getFilesize(argv[1]);
 	//Open file
@@ -45,4 +47,5 @@ int main(int argc, char** argv) {
 	strcat();
 	_tcsncpy();
 	memcpy();
+	setuid(1);
 }
