@@ -22,8 +22,7 @@ initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\
 reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<subscript>\w+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
 
 #look for function call: var = function(params)
-#function_match = re.compile(r'(?P<type>[\w|*]*)\s*(?P<var>([\w]*?))\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>[^)]+)\)')
-function_match = re.compile(r'\s*(?P<var>([\w]*?))\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>(.+))\)')
+function_match = re.compile(r'(?P<type>[\w|*]*?)\s*(?P<var>([\w]*?))\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>(.*))\)')
 
 var_dict = {} #entries look like: {name: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}
 function_dict = {} #entries look like {function: (# of params, param_list)}
@@ -137,19 +136,22 @@ def find_functions(line, linenum):
         arguments = f.group('args').split(',')
         argts = [item.strip() for item in arguments]
         function = f.group('funct')
+        if argts == "":
+            argts = None
         
         #temporarily disabling keywords check
-        #if function not in c_keywords:
-            #create a key entry for the function function_line#_char#
+        #if function not in c_keywords:     #create a key entry for the function function_line#_char#
         key = function+"_"+str(linenum)+"_"+str(line.find(function))
         function_dict[key] = argts
 
 def find_banned(line, linenum):     #TODO: implement in find_functions instead???
-    #check for ms_banned funcitons
+    #check for ms_banned functions
     for word in re.split(r'\W+', line):
         if word in ms_banned:
             outfile.writelines("Line " + str(linenum) + ": " + word + "\n")
-            outfile.writelines("WARNING: This function is on the Microsoft 'banned list' due to known security flaws. See https://msdn.microsoft.com/en-us/library/bb288454.aspx for a suggested replacement.\n")
+            outfile.writelines("WARNING: This function is on the Microsoft 'banned list' due to known "
+                            "security flaws. See https://msdn.microsoft.com/en-us/library/bb288454.aspx"
+                            "for a suggested replacement.\n")
         elif word in clang_banned:
             outfile.writelines("Line " + str(linenum) + ": " + word + "\n")
             outfile.writelines("WARNING: This function " + clang_banned[word][1] + " Please use " + clang_banned[word][0] + " instead.\n")
@@ -184,9 +186,8 @@ def analyze():
         find_functions(line[0], line[1])
         find_banned(line[0], line[1])
         
-            
-    # print(var_dict)
-    # print(function_dict)
+    #print(var_dict)
+    #print(function_dict)
     return clean_code
 
 # returns the line number of the mmap and munmap, as well as the variable that
@@ -196,15 +197,21 @@ def word_scope(function_name, exit_name, start_line, end_line, code, funct_dict)
     #end_line = 75
     segment = code[start_line:end_line-1] #code block except for the close/munmap call
     close_re = r".+\W" + exit_name + r"\W.+"
-    print(code[end_line-1]) #print the close/munmap call
+    #print(code[end_line-1]) print the close/munmap call
     #check for if and while
     check_ifStr = 'if'+'_'+str(end_line)+'_'+str(0)
+    check_whileStr = 'while'+'_'+str(end_line)+'_'+str(0)
     if funct_dict[check_ifStr]:
-        print(funct_dict[check_ifStr])
+        last_str = funct_dict[check_ifStr]
+    elif funct_dict[check_whileStr]:
+        last_str = funct_dict[check_whileStr]
+    #not if or else, can just be normal
     else:
-        print('womp womp')
+        last_str = code[end_line-1]
+
     open_brackets = "{("
     close_brackets = "})"
+    segment.append(last_str)
     for tup in segment:
         for letter in tup[0]:
             if letter in open_brackets:
@@ -247,6 +254,6 @@ if __name__ == "__main__":
     clean_code = analyze()
     logging.warning('done with analysis.')
     #pair_finder(clean_code)
-    word_scope('mmap','munmap',60,75,clean_code, function_dict)
+    #word_scope('mmap','munmap',60,75,clean_code, function_dict)
     #print (clean_code)
 
