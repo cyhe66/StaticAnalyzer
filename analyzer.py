@@ -138,6 +138,20 @@ def find_functions(line, linenum):
         arguments = f.group('args').split(',')
         argts = [item.strip() for item in arguments]
         function = f.group('funct')
+        
+        #check for banned/problematic functions
+        if function in ms_banned:
+            outfile.writelines("Line " + str(linenum) + ": " + function + "\n")
+            outfile.writelines("WARNING: This function is on the Microsoft 'banned list' due to known "
+                            "security flaws. See https://msdn.microsoft.com/en-us/library/bb288454.aspx"
+                            "for a suggested replacement.\n")
+        elif function in clang_banned:
+            outfile.writelines("Line " + str(linenum) + ": " + function + "\n")
+            outfile.writelines("WARNING: This function " + clang_banned[function][1] + " Please use " + clang_banned[function][0] + " instead.\n")
+        elif function in ret_check and '=' not in line: # should assign return value to variable, or check == condition
+            outfile.writelines("Line " + str(linenum) + ": " + function + "\n")
+            outfile.writelines("WARNING: Code does not check the return value of '" + function + "'. This could create vulnerabilities. See CWE 252 for more detail.\n")
+        
         if argts == "":
             argts = None
         
@@ -145,21 +159,6 @@ def find_functions(line, linenum):
         #if function not in c_keywords:     #create a key entry for the function function_line#_char#
         key = function+"_"+str(linenum)+"_"+str(line.find(function))
         function_dict[key] = argts
-
-def find_banned(line, linenum):     #TODO: implement in find_functions instead???
-    #check for ms_banned functions
-    for word in re.split(r'\W+', line):
-        if word in ms_banned:
-            outfile.writelines("Line " + str(linenum) + ": " + word + "\n")
-            outfile.writelines("WARNING: This function is on the Microsoft 'banned list' due to known "
-                            "security flaws. See https://msdn.microsoft.com/en-us/library/bb288454.aspx"
-                            "for a suggested replacement.\n")
-        elif word in clang_banned:
-            outfile.writelines("Line " + str(linenum) + ": " + word + "\n")
-            outfile.writelines("WARNING: This function " + clang_banned[word][1] + " Please use " + clang_banned[word][0] + " instead.\n")
-        elif word in ret_check and '=' not in line: # should assign return value to variable, or check == condition
-            outfile.writelines("Line " + str(linenum) + ": " + word + "\n")
-            outfile.writelines("WARNING: Code does not check the return value of '" + word + "'. This could create vulnerabilities. See CWE 252 for more detail.\n")
 
 def uninit_size(line, linenum, var):
     if var in var_dict:
@@ -176,6 +175,9 @@ def uninit_size(line, linenum, var):
             outfile.writelines("WARNING: Initializing array with size 0\n")
     return False
 
+def mmap_check(line, linenum):
+    return
+
 def analyze():
     for infile in infiles:
         code_tuple = [] 
@@ -189,7 +191,7 @@ def analyze():
     for line in clean_code:
         find_vars(line[0], line[1])
         find_functions(line[0], line[1])
-        find_banned(line[0], line[1])
+        # find_banned(line[0], line[1])
         
     # print(var_dict)
     print(function_dict)
