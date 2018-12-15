@@ -18,8 +18,10 @@ comment
 */
 
 /* and we have another multiline comment here */
-int j;/*and another one-
+int j = 0;/*and another one-
 right here*/ int k;
+int a[j];
+int x = a[j];
 int l;
 l = 12;
 int main(int argc, char** argv) {
@@ -38,7 +40,8 @@ int main(int argc, char** argv) {
 	close(fd);
 	strcpy();
 	lstrcat();
-	k = 0;
+	bzero();
+	k = l;
 	strcat();
 	_tcsncpy();
 	memcpy();

@@ -19,7 +19,7 @@ initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\
 #eg: int i, j;
 
 #look for variable reassignment: (name [+-/*]= value)
-reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\w+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
+reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<subscript>\w+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
 
 #look for function call: var = function(params)
 #function_match = re.compile(r'(?P<type>[\w|*]*)\s*(?P<var>([\w]*?))\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>[^)]+)\)')
@@ -34,7 +34,7 @@ c_keywords = ['auto', 'const', 'double', 'float', 'int', 'short',
                 'default', 'enum', 'goto', 'register', 'sizeof', 
                 'typedef', 'volatile', 'char', 'do', 'extern', 'if', 
                 'return', 'static', 'union', 'while']
-
+#functions banned by microsoft
 ms_banned = ["strcpy", "strcpyA", "strcpyW", "StrCpy", "StrCpyA", "lstrcpyA", 
                 "lstrcpyW", "_tccpy", "_mbccpy", "_ftcscpy", "_mbsncpy", "StrCpyN", 
                 "StrCpyNA", "StrCpyNW", "StrNCpy", "strcpynA", "StrNCpyA", "StrNCpyW", 
@@ -45,6 +45,16 @@ ms_banned = ["strcpy", "strcpyA", "strcpyW", "StrCpy", "StrCpyA", "lstrcpyA",
                 "StrCatNW", "StrNCat", "StrNCatA", "StrNCatW", "lstrncat", "lstrcatnA", 
                 "lstrcatnW", "strncpy", "lstrcpyn", "wcsncpy", "_tcsncpy", "_mbsnbcpy",
                 "strncat","lstrcatn", "wcsncat", "_tcsncat", "_mbsnbcat"]
+#functions checked by clang analyzer: https://clang-analyzer.llvm.org/available_checks.html
+clang_banned = {"bcmp": ("memcmp", "is depreciated."), 
+                    "bcopy": ("memcpy or memmove", "is depreciated."), 
+                    "bzero": ("memset", "is depreciated."), 
+                    "getpw": ("getpwid", "can cause a buffer overflow."), 
+                    "gets": ("fgets", "can cause a buffer overflow."), 
+                    "mktemp": ("mkstemp or mkdtemp", "is insecure due to a race condition")}
+
+#TODO: check functions that require check of return value
+ret_check = ['setuid', 'setgid', 'seteuid', 'setegid', 'setreuid', 'setregid']
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Process c source code.')
@@ -94,20 +104,21 @@ def multi_comment_remover(code_tuple):
 def find_vars(line, linenum):
     d = declaration.match(line)
     if d:
-        size = None
-        if d.group('size'):
-            size = d.group('size')
-            uninit_subscript(line, linenum, size)
+        size = d.group('size')
+        if uninit_size(line, linenum, size):
+            size = var_dict[size][-1]
 
         var_dict[d.group('name')] = (d.group('type').strip(), None, linenum, False, None, size)
 
     m = initialization.match(line)
     if m:
-        size = None
-        if m.group('size'):
-            size = d.group('size')
-            uninit_subscript(line, linenum, size)
-        var_dict[m.group('name')] = (m.group('type').strip(), m.group('value'), linenum, False, None, size)
+        size = m.group('size')
+        if uninit_size(line, linenum, size):
+            size = var_dict[size][-1]
+        value = m.group('value')
+        if value in var_dict:
+            value = var_dict[value][1]
+        var_dict[m.group('name')] = (m.group('type').strip(), value, linenum, False, None, size)
 
     r = reassignment.match(line)
     if r and r.group('name') in var_dict:
@@ -115,7 +126,10 @@ def find_vars(line, linenum):
         var_type = var_dict[name][0]
         first_line = var_dict[name][2]
         var_size = var_dict[name][-1]
-        var_dict[name] = (var_type, r.group('value').strip(), first_line, True, linenum, var_size)
+        value = r.group('value')
+        if value in var_dict:
+            value = var_dict[value][1]
+        var_dict[name] = (var_type, value, first_line, True, linenum, var_size)
 
 def find_functions(line, linenum):
     f = function_match.match(line)
@@ -130,17 +144,30 @@ def find_functions(line, linenum):
         key = function+"_"+str(linenum)+"_"+str(line.find(function))
         function_dict[key] = argts
 
-def find_banned(line, linenum):
+def find_banned(line, linenum):     #TODO: implement in find_functions instead???
     #check for ms_banned funcitons
     for word in re.split(r'\W+', line):
         if word in ms_banned:
             outfile.writelines("Line " + str(linenum) + ": " + word + "\n")
             outfile.writelines("WARNING: This function is on the Microsoft 'banned list' due to known security flaws. See https://msdn.microsoft.com/en-us/library/bb288454.aspx for a suggested replacement.\n")
+        elif word in clang_banned:
+            outfile.writelines("Line " + str(linenum) + ": " + word + "\n")
+            outfile.writelines("WARNING: This function " + clang_banned[word][1] + " Please use " + clang_banned[word][0] + " instead.\n")
 
-def uninit_subscript(line, linenum, var):
-    if var in var_dict and var_dict[var][1] == None:
-        outfile.writelines("Line " + str(linenum) + ": " + line)
-        outfile.writelines("WARNING: Using uninitialized value '" + var + "' to initialize array\n")
+def uninit_size(line, linenum, var):
+    if var in var_dict:
+        if var_dict[var][1] == '0':
+            outfile.writelines("Line " + str(linenum) + ": " + line)
+            outfile.writelines("WARNING: Using variable with value 0 '" + var + "' to initialize array\n")
+        elif var_dict[var][1] == None:
+            outfile.writelines("Line " + str(linenum) + ": " + line)
+            outfile.writelines("WARNING: Using uninitialized value '" + var + "' to initialize/subscript array\n")
+        return True # variable in var_dict
+    else:
+        if var == '0':
+            outfile.writelines("Line " + str(linenum) + ": " + line)
+            outfile.writelines("WARNING: Initializing array with size 0\n")
+    return False
 
 def analyze():
     for infile in infiles:
@@ -158,8 +185,8 @@ def analyze():
         find_banned(line[0], line[1])
         
             
-    #print(var_dict)
-    print(function_dict)
+    # print(var_dict)
+    # print(function_dict)
     return clean_code
 
 # returns the line number of the mmap and munmap, as well as the variable that
