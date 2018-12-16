@@ -40,6 +40,7 @@ int main(int argc, char** argv) {
 	int rc = munmap(mmappedData, filesize);
 	assert(rc == 0);
 	close(fd);
+	void* c = mmap(NULL, 32, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANON, -1, 0);
 	strcpy();
 	lstrcat();
 	bzero();
