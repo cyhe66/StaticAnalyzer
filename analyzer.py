@@ -17,6 +17,7 @@ initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\
     r'+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\w+)\])?\s*=\s*(?P<value>\w*)') 
 #TODO: declaration/initialization do not catch multiple variables on one line
 #eg: int i, j;
+#TODO: does not catch some pointer declarations: void* c -> good, void *c -> not good
 
 #look for variable reassignment: (name [+-/*]= value)
 reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<subscript>\w+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
@@ -151,7 +152,10 @@ def find_functions(line, linenum):
         elif function in ret_check and '=' not in line: # should assign return value to variable, or check == condition
             outfile.writelines("Line " + str(linenum) + ": " + function + "\n")
             outfile.writelines("WARNING: Code does not check the return value of '" + function + "'. This could create vulnerabilities. See CWE 252 for more detail.\n")
-        
+        #specific checks for mmap
+        elif function == 'mmap':
+            mmap_check(line, linenum)
+
         if argts == "":
             argts = None
         
@@ -176,6 +180,12 @@ def uninit_size(line, linenum, var):
     return False
 
 def mmap_check(line, linenum):
+    # check for secure flags, correct bounds on region
+    if 'PROT_WRITE' in line and 'PROT_EXEC' in line:
+        outfile.writelines("Line " + str(linenum) + ": " + line)
+        outfile.writelines("WARNING: Both PROT_WRITE and PROT_EXEC flags are set."
+            " This can lead to exploitable memory regions,"
+            " which could be overwritten with malicious code\n")
     return
 
 def analyze():
