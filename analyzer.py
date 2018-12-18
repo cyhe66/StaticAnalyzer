@@ -1,9 +1,3 @@
-# TODO:
-"""
-make sure dictionaries are cleared for each new input file
-"""
-
-
 import logging
 import argparse
 import getopt
@@ -12,6 +6,9 @@ import re
 
 infiles = None
 outfile = None
+
+PAGE_SIZE = 4096 # changes depending on architecture
+# TODO add page size flag
 
 #look for variable declaration: 'type name;'
 declaration = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|'
@@ -65,10 +62,10 @@ ret_check = ['setuid', 'setgid', 'seteuid', 'setegid', 'setreuid', 'setregid']
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Process c source code.')
-    parser.add_argument('infile', nargs='+', type=argparse.FileType('r'), default=sys.stdin)
+    parser.add_argument('infiles', nargs='+', type=argparse.FileType('r'), default=sys.stdin)
     parser.add_argument('-o', dest='outfile', nargs='?', type=argparse.FileType('w'), default=sys.stdout)
     args = parser.parse_args()
-    return args.infile, args.outfile
+    return args.infiles, args.outfile
 
 def single_comment_remover(text):
     def replacer(match):
@@ -146,6 +143,14 @@ def find_functions(line, linenum):
         argts = [item.strip() for item in arguments]
         function = f.group('funct')
         
+        if argts == "":
+            argts = None
+        
+        #temporarily disabling keywords check
+        #if function not in c_keywords:     #create a key entry for the function function_line#_char#
+        key = function+"_"+str(linenum)+"_"+str(line.find(function))
+        function_dict[key] = argts
+
         #check for banned/problematic functions
         if function in ms_banned:
             outfile.writelines("Line " + str(linenum) + ": " + function + "\n")
@@ -160,15 +165,9 @@ def find_functions(line, linenum):
             outfile.writelines("WARNING: Code does not check the return value of '" + function + "'. This could create vulnerabilities. See CWE 252 for more detail.\n")
         #specific checks for mmap
         elif function == 'mmap':
-            mmap_check(line, linenum)
+            mmap_check(line, linenum, key)
 
-        if argts == "":
-            argts = None
         
-        #temporarily disabling keywords check
-        #if function not in c_keywords:     #create a key entry for the function function_line#_char#
-        key = function+"_"+str(linenum)+"_"+str(line.find(function))
-        function_dict[key] = argts
 
 def uninit_size(line, linenum, var):
     if var in var_dict:
@@ -185,33 +184,39 @@ def uninit_size(line, linenum, var):
             outfile.writelines("WARNING: Initializing array with size 0\n")
     return False
 
-def mmap_check(line, linenum):
+def mmap_check(line, linenum, key):
+    params = function_dict[key][1]
+    # offset = int(params[-1])
+    buffersize = None # what is this???
     # check for secure flags, correct bounds on region
     if 'PROT_WRITE' in line and 'PROT_EXEC' in line:
         outfile.writelines("Line " + str(linenum) + ": " + line)
         outfile.writelines("WARNING: Both PROT_WRITE and PROT_EXEC flags are set."
             " This can lead to exploitable memory regions,"
             " which could be overwritten with malicious code\n")
+    if 'MAP_FIXED' in line:
+        #TODO: search function dict for previous call clearing same mapping
+        outfile.writelines("Line " + str(linenum) + ": " + line)
+        outfile.writelines("WARNING: Using MAP_FIXED is only safe when the address range specified"
+            "by addr " + params[0] + " and length " + params[1] + 
+            " was previously reserved using another mapping.")
+
+    # if offset < 0:
+    #     outfile.writelines("Line " + str(linenum) + ": " + line)
+    #     outfile.writelines("WARNING: Offset parameter of mmap should be a positive value.")
+    # elif offset > buffersize:
+    #     outfile.writelines("Line " + str(linenum) + ": " + line)
+    #     outfile.writelines("WARNING: Offset parameter of mmap should be less than the size of the buffer.")
     return
 
-def analyze():
-    for infile in infiles:
-        code_tuple = [] 
-        code = infile.readlines()
-        length = 0
-        for line in code:
-            length += 1
-            code_tuple.append([line,length])
-    clean_code = multi_comment_remover(code_tuple) #all comments now ignored
-
+def analyze(clean_code):
     for line in clean_code:
         find_vars(line[0], line[1])
         find_functions(line[0], line[1])
         # find_banned(line[0], line[1])
         
-    # print(var_dict)
+    print(var_dict)
     print(function_dict)
-    return clean_code
 
 # returns the line number of the mmap and munmap, as well as the variable that
 # is associated
@@ -270,17 +275,20 @@ def word_scope(function_name, exit_name, start_line, end_line, code, funct_dict)
             print(tup[0].find('munmap'))
         '''
 if __name__ == "__main__":
-    # infiles = parse_args()
-    # rules = c_ruleset.ruleset()
     infiles, outfile = parse_args()
-    #print(outfile.readall())
     logging.basicConfig(level=logging.WARNING)
-    logging.warning('started analysis')
-
-    clean_code = analyze()
-    logging.warning('done with analysis.')
-    #pair_finder(clean_code)
-    #word_scope('mmap','munmap',60,75,clean_code, function_dict) # for text2
-    word_scope('mmap','munmap',35,40,clean_code, function_dict) # for text1
-    #print (clean_code)
-
+    for infile in infiles:
+        logging.warning("started analysis of '" + infile.name + "'")
+        code_tuple = [] 
+        code = infile.readlines()
+        length = 0
+        for line in code:
+            length += 1
+            code_tuple.append([line,length])
+            clean_code = multi_comment_remover(code_tuple) #all comments now ignored
+        analyze(clean_code)
+        #pair_finder(clean_code)
+        #word_scope('mmap','munmap',60,75,clean_code, function_dict) # for text2
+        # word_scope('mmap','munmap',35,40,clean_code, function_dict) # for text1
+        #print (clean_code)
+        logging.warning("done with analysis of '" + infile.name + "'")
