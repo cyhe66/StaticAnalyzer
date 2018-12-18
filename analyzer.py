@@ -224,17 +224,22 @@ def word_scope(function_name, exit_name, start_line, end_line, code, funct_dict)
     #check for if and while
     check_ifStr = 'if'+'_'+str(end_line)+'_'+str(0)
     check_whileStr = 'while'+'_'+str(end_line)+'_'+str(0)
-    if funct_dict[check_ifStr]:
-        last_str = funct_dict[check_ifStr]
-    elif funct_dict[check_whileStr]:
-        last_str = funct_dict[check_whileStr]
-    #not if or else, can just be normal
-    else:
+    try:
+        if funct_dict[check_ifStr]:
+            last_str = funct_dict[check_ifStr]
+        elif funct_dict[check_whileStr]:
+            last_str = funct_dict[check_whileStr]
+        print(last_str)
+    except KeyError:
         last_str = code[end_line-1]
-
+        print(last_str)
+    
     open_brackets = "{("
     close_brackets = "})"
-    segment.append(last_str)
+    segment.append((str(last_str),end_line))
+    
+    for tup in segment:
+        print(tup)
     for tup in segment:
         for letter in tup[0]:
             if letter in open_brackets:
@@ -244,18 +249,16 @@ def word_scope(function_name, exit_name, start_line, end_line, code, funct_dict)
                     stack.pop()
                 if letter == ")" and stack[-1] == "(":
                     stack.pop()
-        #but this could just be any instance of munmap
 
-    #if the call to unmap is normal, the stack structure shoud be ok
-    #if the call to unmap is in an if statement, we have to strip the if statement to only use the argument
-        #this can be done by checking the function dictionary and the lines for which are called
-    #print(code[75][0])
     if re.match(close_re, tup[0]) != None:  # found an instance of munmap 
         #tup[0] is the line with the closing operator 
         print(tup[0])
         if (len(stack) == 0):
             print('empty stack. We gucci.')
         print(stack)
+    else:
+        print('something is wrong.')
+        print(tup[0])
 
 
         '''
@@ -277,6 +280,7 @@ if __name__ == "__main__":
     clean_code = analyze()
     logging.warning('done with analysis.')
     #pair_finder(clean_code)
-    #word_scope('mmap','munmap',60,75,clean_code, function_dict)
+    #word_scope('mmap','munmap',60,75,clean_code, function_dict) # for text2
+    word_scope('mmap','munmap',35,40,clean_code, function_dict) # for text1
     #print (clean_code)
 
