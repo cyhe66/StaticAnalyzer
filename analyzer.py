@@ -309,8 +309,10 @@ if __name__ == "__main__":
             code_tuple.append([line,length])
             clean_code = multi_comment_remover(code_tuple) #all comments now ignored
         analyze(clean_code)
-
-        mapping = start_end(var_dict, function_dict,'mmap', 'munmap')
-        word_scope(mapping,clean_code, function_dict) # for text1
+    
+        pairs = [('mmap','munmap'),('malloc','free'), ('calloc','free'), ('realloc', 'free')] 
+        for x in pairs:
+            mapping = start_end(var_dict, function_dict,x[0], x[1])
+            word_scope(mapping,clean_code, function_dict) # for text1
 
         logging.warning("done with analysis of '" + infile.name + "'")
