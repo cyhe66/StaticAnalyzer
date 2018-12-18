@@ -317,6 +317,19 @@ def start_end(var_dict, function_dict, start_word, end_word):
     #print(closed)# in format {var:open_function, closed_function, line#opened, line#closed}
     return closed
 
+def check_user_defined():
+    unused = []
+    for function in function_dict:
+        f_name = function.split('_')[0] + '()'
+        if function_dict[function][1] and f_name != 'main()':
+            unused.append(f_name)
+        elif f_name in unused:
+            unused.remove(f_name)
+    outfile.writelines("WARNING: The following function(s): ")
+    outfile.writelines(unused)
+    outfile.writelines("\nare defined but never used. Consider removing from code.\n")
+
+
 if __name__ == "__main__":
     infiles, outfile = parse_args()
 
@@ -331,8 +344,7 @@ if __name__ == "__main__":
             code_tuple.append([line,length])
             clean_code = multi_comment_remover(code_tuple) #all comments now ignored
         analyze(clean_code)
-        # print(var_dict)
-        # print(function_dict)
+        check_user_defined()
     
         for x in pairs:
             mapping = start_end(var_dict, function_dict,x[0], x[1])
