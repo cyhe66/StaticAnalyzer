@@ -314,5 +314,6 @@ if __name__ == "__main__":
         for x in pairs:
             mapping = start_end(var_dict, function_dict,x[0], x[1])
             word_scope(mapping,clean_code, function_dict) # for text1
-
+        var_dict = {}
+        function_dict = {}
         logging.warning("done with analysis of '" + infile.name + "'")
