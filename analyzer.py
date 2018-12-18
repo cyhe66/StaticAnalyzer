@@ -1,3 +1,9 @@
+# TODO:
+"""
+make sure dictionaries are cleared for each new input file
+"""
+
+
 import logging
 import argparse
 import getopt
