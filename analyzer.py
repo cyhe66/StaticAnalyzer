@@ -27,10 +27,12 @@ reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<subsc
 #TODO: does not catch: x = x+1 properly
 
 #look for function call: var = function(params)
-function_match = re.compile(r'(?P<type>[\w|*]*?)\s*(?P<var>([\w]*?))\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>(.*))\)')
+function_match = re.compile(r'(?P<type>[\w|*]*?)\s*(?P<var>([\w]*?))\s*(?:\[(\w+)\])?\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>(.*))\)')
 
 var_dict = {} #entries look like: {name: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}
 function_dict = {} #entries look like {function: param_list}
+
+pairs = [('mmap','munmap'),('malloc','free'), ('calloc','free'), ('realloc', 'free')] 
 
 c_keywords = ['auto', 'const', 'double', 'float', 'int', 'short', 
                 'struct', 'unsigned', 'break', 'continue', 'else', 
@@ -168,7 +170,7 @@ def find_functions(line, linenum):
             outfile.writelines("WARNING: Code does not check the return value of '" + function + "'. This could create vulnerabilities. See CWE 252 for more detail.\n")
         #specific checks for mmap
         elif function == 'mmap':
-            mmap_check(line, linenum, key)
+            mmap_check(line, linenum, key, f.group('var'))
         elif function in print_functions:
             print_check(line, linenum, key)
         
@@ -188,9 +190,13 @@ def uninit_size(line, linenum, var):
             outfile.writelines("WARNING: Initializing array with size 0\n")
     return False
 
-def mmap_check(line, linenum, key):
+def mmap_check(line, linenum, key, var):
     params = function_dict[key]
     offset = int(params[-1])
+    buffersize = None
+    if var in var_dict and var_dict[var][-1]:
+        buffersize = int(var_dict[var][-1])
+
     # check for secure flags, correct bounds on region
     if 'PROT_WRITE' in line and 'PROT_EXEC' in line:
         outfile.writelines("Line " + str(linenum) + ": " + line)
@@ -203,10 +209,13 @@ def mmap_check(line, linenum, key):
         outfile.writelines("WARNING: Using MAP_FIXED is only safe when the address range specified"
             "by addr " + params[0] + " and length " + params[1] + 
             " was previously reserved using another mapping. Also ensure that " + 
-            params[0] + " is divisible by " + PAGE_SIZE + "\n")
+            params[0] + " is divisible by " + str(PAGE_SIZE) + "\n")
     if offset < 0:
         outfile.writelines("Line " + str(linenum) + ": " + line)
-        outfile.writelines("WARNING: Offset parameter of mmap should be a positive value.")
+        outfile.writelines("WARNING: Offset parameter of mmap should be a positive value.\n")
+    if buffersize and offset > buffersize:
+        outfile.writelines("Line " + str(linenum) + ": " + line)
+        outfile.writelines("WARNING: Offset parameter of mmap should be less than the size of the buffer.\n")
     return
 
 def print_check(line, linenum, key):
@@ -318,8 +327,9 @@ if __name__ == "__main__":
             code_tuple.append([line,length])
             clean_code = multi_comment_remover(code_tuple) #all comments now ignored
         analyze(clean_code)
+        # print(var_dict)
+        # print(function_dict)
     
-        pairs = [('mmap','munmap'),('malloc','free'), ('calloc','free'), ('realloc', 'free')] 
         for x in pairs:
             mapping = start_end(var_dict, function_dict,x[0], x[1])
             word_scope(mapping,clean_code, function_dict) # for text1
