@@ -204,77 +204,103 @@ def analyze():
         # find_banned(line[0], line[1])
         
     # print(var_dict)
-    print(function_dict)
+    #print(function_dict)
     return clean_code
 
 # returns the line number of the mmap and munmap, as well as the variable that
 # is associated
-def word_scope(function_name, exit_name, start_line, end_line, code, funct_dict):
-    stack = []
-    #end_line = 75
-    segment = code[start_line:end_line-1] #code block except for the close/munmap call
-    close_re = r".+\W" + exit_name + r"\W.+"
-    #print(code[end_line-1]) print the close/munmap call
-    #check for if and while
-    check_ifStr = 'if'+'_'+str(end_line)+'_'+str(0)
-    check_whileStr = 'while'+'_'+str(end_line)+'_'+str(0)
-    try:
-        if funct_dict[check_ifStr]:
-            last_str = funct_dict[check_ifStr]
-        elif funct_dict[check_whileStr]:
-            last_str = funct_dict[check_whileStr]
-        print(last_str)
-    except KeyError:
-        last_str = code[end_line-1]
-        print(last_str)
-    
-    open_brackets = "{("
-    close_brackets = "})"
-    segment.append((str(last_str),end_line))
-    
-    for tup in segment:
-        print(tup)
-    for tup in segment:
-        for letter in tup[0]:
-            if letter in open_brackets:
-                stack.append(letter)
-            if letter in close_brackets:
-                if letter == "}" and stack[-1] == "{":
-                    stack.pop()
-                if letter == ")" and stack[-1] == "(":
-                    stack.pop()
+#def word_scope(function_name, exit_name, start_line, end_line, code, funct_dict):
+def word_scope(dictionary, code, funct_dict):
+    for keys in dictionary:
+        variable = keys
+        start_name = dictionary[keys][0]
+        exit_name = dictionary[keys][1]
+        start_line = dictionary[keys][2]
+        end_line = dictionary[keys][3]
 
-    if re.match(close_re, tup[0]) != None:  # found an instance of munmap 
-        #tup[0] is the line with the closing operator 
-        print(tup[0])
-        if (len(stack) == 0):
-            print('empty stack. We gucci.')
-        print(stack)
-    else:
-        print('something is wrong.')
-        print(tup[0])
+        stack = []
+        try:
+            segment = code[int(start_line):int(end_line)-1] #code block except for the close/munmap call
+            close_re = r".+\W" + exit_name + r"\W.+"
+            check_ifStr = 'if'+'_'+str(end_line)+'_'+str(0)
+            check_whileStr = 'while'+'_'+str(end_line)+'_'+str(0)
+            try:
+                if funct_dict[check_ifStr]:
+                    last_str = funct_dict[check_ifStr]
+                elif funct_dict[check_whileStr]:
+                    last_str = funct_dict[check_whileStr]
+            except KeyError:
+                last_str = code[int(end_line)-1]
+            
+            open_brackets = "{("
+            close_brackets = "})"
+            segment.append((str(last_str),end_line))
+            
+            for tup in segment:
+                for letter in tup[0]:
+                    if letter in open_brackets:
+                        stack.append(letter)
+                    if letter in close_brackets:
+                        if letter == "}" and stack[-1] == "{":
+                            stack.pop()
+                        if letter == ")" and stack[-1] == "(":
+                            stack.pop()
 
+            if re.match(close_re, tup[0]) != None:  # found an instance of munmap 
+                #tup[0] is the line with the closing operator 
+                if (len(stack) == 0):
+                    continue
+            else:
+                logging.warning('Parentheses may not match for '+ start_name+"/"+exit_name)
+        except ValueError: #open but not closed
+            logging.warning('Memory allocated for variable %s on line %s but no call to free memory found.', variable, start_line)
+            continue
 
-        '''
-        if len(stack) == 0:
-            print(tup[1])
+def start_end(var_dict, function_dict, start_word, end_word):
+    opened = {} #(start,end, var)
+    for keys in function_dict:
+        if start_word in keys:
+            foo = keys.split('_')
+            for variable, attributes in var_dict.items():
+                if str(attributes[2]) == (foo[1]):
+                    opened[variable] = (foo[0],foo[1])
+    closed = {}
+    for keys in function_dict:
+        if end_word in keys:
+            bar = keys.split('_')
+            for variable, attributes in var_dict.items():
+                for items in opened:
+                    if str(variable) == items and function_dict[keys][0] == str(variable):
+                        closed[str(variable)] = (opened[items][0],bar[0],opened[items][1], bar[1])
         else:
-            print('Stack unresolved: ', stack,' at line :', tup[1])
-            print(tup[0])
-            print(tup[0].find('munmap'))
-        '''
+            continue
+    #returns list of variables and shit that are opened and closed
+    '''
+    print(opened)# in format {var,  open_function, line#}
+    print(closed)# in format {var:closed_function, line#opened, line#closed}
+    '''
+    for keys in opened:
+        if keys not in closed.keys():
+            closed[keys] = (opened[keys][0],'', opened[keys][1],'')
+    
+    #print(closed)# in format {var:open_function, closed_function, line#opened, line#closed}
+    return closed
+
 if __name__ == "__main__":
     # infiles = parse_args()
     # rules = c_ruleset.ruleset()
     infiles, outfile = parse_args()
-    #print(outfile.readall())
+
     logging.basicConfig(level=logging.WARNING)
     logging.warning('started analysis')
 
     clean_code = analyze()
-    logging.warning('done with analysis.')
-    #pair_finder(clean_code)
+    #logging.warning('done with analysis.')
+   
+   
+    #something has to call this for (mmap,munmap) (,), (,)
     #word_scope('mmap','munmap',60,75,clean_code, function_dict) # for text2
-    word_scope('mmap','munmap',35,40,clean_code, function_dict) # for text1
-    #print (clean_code)
+    mapping = start_end(var_dict, function_dict,'mmap', 'munmap')
+    #word_scope('mmap','munmap',35,40,clean_code, function_dict) # for text1
+    word_scope(mapping,clean_code, function_dict) # for text1
 
