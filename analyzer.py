@@ -26,11 +26,11 @@ initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\
 reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<subscript>\w+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
 #TODO: does not catch: x = x+1 properly
 
-#look for function call: var = function(params)
-function_match = re.compile(r'(?P<type>[\w|*]*?)\s*(?P<var>([\w]*?))\s*(?:\[(\w+)\])?\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>(.*))\)')
+#look for function call: [type var =] funct(args)
+function_match = re.compile(r'(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)*(?:\*?\*?\s*))(?P<var>([\w]*?))\s*(?:\[(\w+)\])?\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>(.*))\)')
 
 var_dict = {} #entries look like: {name: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}
-function_dict = {} #entries look like {function: param_list}
+function_dict = {} #entries look like {function: param_list, user_defined?}
 
 pairs = [('mmap','munmap'),('malloc','free'), ('calloc','free'), ('realloc', 'free')] 
 
@@ -38,8 +38,8 @@ c_keywords = ['auto', 'const', 'double', 'float', 'int', 'short',
                 'struct', 'unsigned', 'break', 'continue', 'else', 
                 'for', 'long', 'signed', 'switch', 'void', 'case',
                 'default', 'enum', 'goto', 'register', 'sizeof', 
-                'typedef', 'volatile', 'char', 'do', 'extern', 'if', 
-                'return', 'static', 'union', 'while']
+                'typedef', 'volatile', 'char', 'do', 'extern', 
+                'return', 'static', 'union'] # specifically keeping 'if' and 'while' 
 #functions banned by microsoft
 ms_banned = ["strcpy", "strcpyA", "strcpyW", "StrCpy", "StrCpyA", "lstrcpyA", 
                 "lstrcpyW", "_tccpy", "_mbccpy", "_ftcscpy", "_mbsncpy", "StrCpyN", 
@@ -151,10 +151,14 @@ def find_functions(line, linenum):
         if argts == "":
             argts = None
         
+        user_defined = False
+        if f.group('type') and '=' not in line:
+            user_defined = True
+
         #temporarily disabling keywords check
         #if function not in c_keywords:     #create a key entry for the function function_line#_char#
         key = function+"_"+str(linenum)+"_"+str(line.find(function))
-        function_dict[key] = argts
+        function_dict[key] = (argts, user_defined)
 
         #check for banned/problematic functions
         if function in ms_banned:
@@ -191,7 +195,7 @@ def uninit_size(line, linenum, var):
     return False
 
 def mmap_check(line, linenum, key, var):
-    params = function_dict[key]
+    params = function_dict[key][0]
     offset = int(params[-1])
     buffersize = None
     if var in var_dict and var_dict[var][-1]:
@@ -219,7 +223,7 @@ def mmap_check(line, linenum, key, var):
     return
 
 def print_check(line, linenum, key):
-    params = function_dict[key]
+    params = function_dict[key][0]
     for param in params:
         if param in var_dict:
             param = var_dict[param][1]
@@ -297,7 +301,7 @@ def start_end(var_dict, function_dict, start_word, end_word):
             bar = keys.split('_')
             for variable, attributes in var_dict.items():
                 for items in opened:
-                    if str(variable) == items and function_dict[keys][0] == str(variable):
+                    if str(variable) == items and function_dict[keys][0][0] == str(variable):
                         closed[str(variable)] = (opened[items][0],bar[0],opened[items][1], bar[1])
         else:
             continue
