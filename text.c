@@ -49,4 +49,5 @@ int main(int argc, char** argv) {
 	_tcsncpy();
 	memcpy();
 	setuid(1);
+	snprintf(buf, 128, argv[1]);
 }

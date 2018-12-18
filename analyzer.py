@@ -30,7 +30,7 @@ reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<subsc
 function_match = re.compile(r'(?P<type>[\w|*]*?)\s*(?P<var>([\w]*?))\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>(.*))\)')
 
 var_dict = {} #entries look like: {name: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}
-function_dict = {} #entries look like {function: (# of params, param_list)}
+function_dict = {} #entries look like {function: param_list}
 
 c_keywords = ['auto', 'const', 'double', 'float', 'int', 'short', 
                 'struct', 'unsigned', 'break', 'continue', 'else', 
@@ -56,6 +56,9 @@ clang_banned = {"bcmp": ("memcmp", "is depreciated."),
                     "getpw": ("getpwid", "can cause a buffer overflow."), 
                     "gets": ("fgets", "can cause a buffer overflow."), 
                     "mktemp": ("mkstemp or mkdtemp", "is insecure due to a race condition")}
+
+print_functions = ['printf', 'printf', 'sprintf', 'snprintf', 'vfprintf',
+                        'vprintf', 'vsprintf', 'vsnprintf']
 
 #TODO: check functions that require check of return value
 ret_check = ['setuid', 'setgid', 'seteuid', 'setegid', 'setreuid', 'setregid']
@@ -166,7 +169,8 @@ def find_functions(line, linenum):
         #specific checks for mmap
         elif function == 'mmap':
             mmap_check(line, linenum, key)
-
+        elif function in print_functions:
+            print_check(line, linenum, key)
         
 
 def uninit_size(line, linenum, var):
@@ -185,9 +189,8 @@ def uninit_size(line, linenum, var):
     return False
 
 def mmap_check(line, linenum, key):
-    params = function_dict[key][1]
-    # offset = int(params[-1])
-    buffersize = None # what is this???
+    params = function_dict[key]
+    offset = int(params[-1])
     # check for secure flags, correct bounds on region
     if 'PROT_WRITE' in line and 'PROT_EXEC' in line:
         outfile.writelines("Line " + str(linenum) + ": " + line)
@@ -199,21 +202,27 @@ def mmap_check(line, linenum, key):
         outfile.writelines("Line " + str(linenum) + ": " + line)
         outfile.writelines("WARNING: Using MAP_FIXED is only safe when the address range specified"
             "by addr " + params[0] + " and length " + params[1] + 
-            " was previously reserved using another mapping.")
-
-    # if offset < 0:
-    #     outfile.writelines("Line " + str(linenum) + ": " + line)
-    #     outfile.writelines("WARNING: Offset parameter of mmap should be a positive value.")
-    # elif offset > buffersize:
-    #     outfile.writelines("Line " + str(linenum) + ": " + line)
-    #     outfile.writelines("WARNING: Offset parameter of mmap should be less than the size of the buffer.")
+            " was previously reserved using another mapping. Also ensure that " + 
+            params[0] + " is divisible by " + PAGE_SIZE + "\n")
+    if offset < 0:
+        outfile.writelines("Line " + str(linenum) + ": " + line)
+        outfile.writelines("WARNING: Offset parameter of mmap should be a positive value.")
     return
+
+def print_check(line, linenum, key):
+    params = function_dict[key]
+    for param in params:
+        if param in var_dict:
+            param = var_dict[param][1]
+        if 'argv' in param:
+            outfile.writelines("Line " + str(linenum) + ": " + line)
+            outfile.writelines("WARNING: Passing user input to this function makes code "
+                "susceptible to a format string attack (CWE 134).\n")
 
 def analyze(clean_code):
     for line in clean_code:
         find_vars(line[0], line[1])
         find_functions(line[0], line[1])
-        # find_banned(line[0], line[1])
     return clean_code
 
 # returns the line number of the mmap and munmap, as well as the variable that
