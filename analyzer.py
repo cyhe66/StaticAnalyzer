@@ -19,16 +19,12 @@ initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\
 #look for variable reassignment: (name [+-/*]= value)
 reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*'
     r'(?:\[(?P<subscript>\w+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
-#TODO: does not catch: x = x+1 properly
 
 #look for function call: [type var =] funct(args)
-# function_match = re.compile(r'(?P<type>[\w|*]*?)\s*(?P<var>([\w]*?))\s*(?:\[(\w+)\])?\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>(.*))\)')
-
 function_match = re.compile(r'(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|'
     r'size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double'
     r'\s*|_Bool\s*|complex\s*)*(?:\*?\*?\s*))(?P<var>([\w]*?))\s*(?:\[(\w+)\])?\s*([=]?|\s*?)'
     r'\s*(?P<funct>([\w]*))\s*\((?P<args>(.*))\)')
-
 
 var_dict = {} #entries look like: {name: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}
 function_dict = {} #entries look like {function: param_list, userDefined}
@@ -239,8 +235,8 @@ def analyze(clean_code):
         find_vars(line[0], line[1])
         find_functions(line[0], line[1])
 
-# returns the line number of the mmap and munmap, as well as the variable that
-# is associated
+# returns the line number of the mmap and munmap,
+# as well as the variable that is associated
 def word_scope(dictionary, code, funct_dict):
     for keys in dictionary:
         variable = keys
@@ -288,7 +284,6 @@ def word_scope(dictionary, code, funct_dict):
             continue
 
 def start_end(var_dict, function_dict, start_word, end_word, code):
-    #print(function_dict)
     opened = {} #(start,end, var)
     for keys in function_dict:
         if start_word in keys:
@@ -341,7 +336,6 @@ if __name__ == "__main__":
             code_tuple.append([line,length])
             clean_code = multi_comment_remover(code_tuple) #all comments now ignored
         analyze(clean_code)
-        # print(function_dict)
         check_user_defined()
         for x in pairs:
             mapping = start_end(var_dict, function_dict,x[0], x[1], clean_code)
