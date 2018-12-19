@@ -22,10 +22,13 @@ reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*'
 #TODO: does not catch: x = x+1 properly
 
 #look for function call: [type var =] funct(args)
+function_match = re.compile(r'(?P<type>[\w|*]*?)\s*(?P<var>([\w]*?))\s*(?:\[(\w+)\])?\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>(.*))\)')
+'''
 function_match = re.compile(r'(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|'
     r'size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double'
     r'\s*|_Bool\s*|complex\s*)*(?:\*?\*?\s*))(?P<var>([\w]*?))\s*(?:\[(\w+)\])?\s*([=]?|\s*?)'
     r'\s*(?P<funct>([\w]*))\s*\((?P<args>(.*))\)')
+'''
 
 var_dict = {} #entries look like: {name: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}
 function_dict = {} #entries look like {function: param_list, userDefined}
@@ -239,24 +242,28 @@ def analyze(clean_code):
 # returns the line number of the mmap and munmap, as well as the variable that
 # is associated
 def word_scope(dictionary, code, funct_dict):
+    #print(dictionary)
     for keys in dictionary:
         variable = keys
         start_name = dictionary[keys][0]
         exit_name = dictionary[keys][1]
         start_line = dictionary[keys][2]
         end_line = dictionary[keys][3]
-
         stack = []
         try:
             segment = code[int(start_line):int(end_line)-1] #code block except for the close/munmap call
             close_re = r".+\W" + exit_name + r"\W.+"
             check_ifStr = 'if'+'_'+str(end_line)+'_'+str(0)
             check_whileStr = 'while'+'_'+str(end_line)+'_'+str(0)
+            check_switchStr = 'switch'+'_'+str(end_line)+'_'+str(0)
             try:
                 if funct_dict[check_ifStr]:
                     last_str = funct_dict[check_ifStr]
+                    #print('!!!!!!!!!!!!!!!!!!!!!!!!',last_str) 
                 elif funct_dict[check_whileStr]:
                     last_str = funct_dict[check_whileStr]
+                elif funct_dict[check_switchStr]:
+                    last_str = funct_dict[check_switchStr]
             except KeyError:
                 last_str = code[int(end_line)-1]
             
@@ -273,7 +280,7 @@ def word_scope(dictionary, code, funct_dict):
                             stack.pop()
                         if letter == ")" and stack[-1] == "(":
                             stack.pop()
-
+            print(stack)
             if re.match(close_re, tup[0]) != None:  # found an instance of munmap 
                 if (len(stack) == 0):
                     continue
@@ -284,16 +291,17 @@ def word_scope(dictionary, code, funct_dict):
             continue
 
 def start_end(var_dict, function_dict, start_word, end_word, code):
+    #print(function_dict)
     opened = {} #(start,end, var)
     for keys in function_dict:
         if start_word in keys:
             foo = keys.split('_')
             for variable, attributes in var_dict.items():
-                if str(attributes[2]) == (foo[1]):
+                if str(attributes[2]) == (foo[1]): #foo[1] is the line it is on
                     opened[variable] = (foo[0],foo[1])
     closed = {}
     for keys in function_dict:
-        if end_word in keys:
+        if end_word in keys:#str(function_dict[keys][0]):
             bar = keys.split('_')
             for variable, attributes in var_dict.items():
                 for items in opened:
@@ -307,8 +315,6 @@ def start_end(var_dict, function_dict, start_word, end_word, code):
     for keys in opened:
         if keys not in closed.keys():
             closed[keys] = (opened[keys][0],'', opened[keys][1],'')
-    
-    #print(closed)# in format {var:open_function, closed_function, line#opened, line#closed}
     return closed
 
 # checks for user defined functions that are never used in the code
