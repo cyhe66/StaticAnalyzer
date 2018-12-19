@@ -9,21 +9,15 @@ size_t getFilesize(const char* filename) {
 	stat(filename, &st);
 	return st.st_size;
 }
-//this is a full comment strcpy();
-// more comments
-blah; // this is also a comment strcpy();
+//this is a full comment
 /*this is even more comments */
 /* multiline
 comment
 */
-
-/* and we have another multiline comment here */
 int j = 0;/*and another one-
 right here*/ int k;
 int a[j];
-int x = a[j];
 int l;
-l = 12;
 int x;
 
 int main(int argc, char** argv) {
@@ -42,11 +36,8 @@ int main(int argc, char** argv) {
 	close(fd);
 	void* c = mmap(NULL, 32, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANON, -1, 0);
 	strcpy();
-	lstrcat();
 	bzero();
 	k = l;
-	strcat();
-	_tcsncpy();
 	memcpy();
 	setuid(1);
 	snprintf(buf, 128, argv[1]);

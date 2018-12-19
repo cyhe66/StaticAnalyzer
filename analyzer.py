@@ -1,6 +1,5 @@
 import logging
 import argparse
-import getopt
 import sys
 import re
 
