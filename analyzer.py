@@ -5,9 +5,7 @@ import re
 
 infiles = None
 outfile = None
-
 PAGE_SIZE = 4096 # changes depending on architecture
-# TODO add page size flag
 
 #look for variable declaration: 'type name;'
 declaration = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|'
@@ -16,20 +14,21 @@ declaration = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|
 #look for variable initialization: 'type name = value'
 initialization = re.compile(r'\b(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|'
     r'volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)'
-    r'+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\w+)\])?\s*=\s*(?P<value>\w*)') 
-#TODO: declaration/initialization do not catch multiple variables on one line
-#eg: int i, j;
-#TODO: does not catch some pointer declarations: void* c -> good, void *c -> not good
+    r'+(?:\*?\*?\s*))(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<size>\w+)\])?\s*=\s*(?P<value>\w*)')
 
 #look for variable reassignment: (name [+-/*]= value)
-reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[(?P<subscript>\w+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
+reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*'
+    r'(?:\[(?P<subscript>\w+)\])?\s*[+\-/\*]?=\s*(?P<value>\w*)')
 #TODO: does not catch: x = x+1 properly
 
 #look for function call: [type var =] funct(args)
-function_match = re.compile(r'(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double\s*|_Bool\s*|complex\s*)*(?:\*?\*?\s*))(?P<var>([\w]*?))\s*(?:\[(\w+)\])?\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>(.*))\)')
+function_match = re.compile(r'(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|'
+    r'size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double'
+    r'\s*|_Bool\s*|complex\s*)*(?:\*?\*?\s*))(?P<var>([\w]*?))\s*(?:\[(\w+)\])?\s*([=]?|\s*?)'
+    r'\s*(?P<funct>([\w]*))\s*\((?P<args>(.*))\)')
 
 var_dict = {} #entries look like: {name: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}
-function_dict = {} #entries look like {function: param_list, user_defined?}
+function_dict = {} #entries look like {function: param_list, userDefined}
 
 pairs = [('mmap','munmap'),('malloc','free'), ('calloc','free'), ('realloc', 'free')] 
 
@@ -57,14 +56,12 @@ clang_banned = {"bcmp": ("memcmp", "is depreciated."),
                     "getpw": ("getpwid", "can cause a buffer overflow."), 
                     "gets": ("fgets", "can cause a buffer overflow."), 
                     "mktemp": ("mkstemp or mkdtemp", "is insecure due to a race condition")}
-
 print_functions = ['printf', 'printf', 'sprintf', 'snprintf', 'vfprintf',
                         'vprintf', 'vsprintf', 'vsnprintf']
-
-#TODO: check functions that require check of return value
+#functions that require return value check
 ret_check = ['setuid', 'setgid', 'seteuid', 'setegid', 'setreuid', 'setregid']
 
-def parse_args():
+def parse_args(): # usage: analyzer.py [-h] [-o [OUTFILE]] infiles [infiles ...]
     parser = argparse.ArgumentParser(description='Process c source code.')
     parser.add_argument('infiles', nargs='+', type=argparse.FileType('r'), default=sys.stdin)
     parser.add_argument('-o', dest='outfile', nargs='?', type=argparse.FileType('w'), default=sys.stdout)
@@ -110,10 +107,11 @@ def multi_comment_remover(code_tuple):
     return clean_code
 
 def find_vars(line, linenum):
+    #check regex
     d = declaration.match(line)
     m = initialization.match(line)
     r = reassignment.match(line)
-    
+    # add variable to dictionary if match
     if d:
         size = d.group('size')
         if uninit_size(line, linenum, size):
@@ -140,7 +138,7 @@ def find_vars(line, linenum):
             value = var_dict[value][1]
         var_dict[name] = (var_type, value, first_line, True, linenum, var_size)
 
-def find_functions(line, linenum):
+def find_functions(line, linenum): # match regex and add function to dictionary if match
     f = function_match.match(line)
     if f:
         arguments = f.group('args').split(',')
@@ -159,7 +157,7 @@ def find_functions(line, linenum):
         key = function+"_"+str(linenum)+"_"+str(line.find(function))
         function_dict[key] = (argts, user_defined)
 
-        #check for banned/problematic functions
+        #check for banned/dangerous functions
         if function in ms_banned:
             outfile.writelines("Line " + str(linenum) + ": " + function + "\n")
             outfile.writelines("WARNING: This function is on the Microsoft 'banned list' due to known "
@@ -174,10 +172,11 @@ def find_functions(line, linenum):
         #specific checks for mmap
         elif function == 'mmap':
             mmap_check(line, linenum, key, f.group('var'))
+        #specific checks for print functions
         elif function in print_functions:
             print_check(line, linenum, key)
         
-
+# check for use of uninitialized/zero value as array size
 def uninit_size(line, linenum, var):
     if var in var_dict:
         if var_dict[var][1] == '0':
@@ -193,6 +192,7 @@ def uninit_size(line, linenum, var):
             outfile.writelines("WARNING: Initializing array with size 0\n")
     return False
 
+# check mmap arguments
 def mmap_check(line, linenum, key, var):
     params = function_dict[key][0]
     offset = int(params[-1])
@@ -221,21 +221,22 @@ def mmap_check(line, linenum, key, var):
         outfile.writelines("WARNING: Offset parameter of mmap should be less than the size of the buffer.\n")
     return
 
+#check for format string attack
 def print_check(line, linenum, key):
     params = function_dict[key][0]
     for param in params:
         if param in var_dict:
             param = var_dict[param][1]
-        if 'argv' in param:
+        if param and 'argv' in param:
             outfile.writelines("Line " + str(linenum) + ": " + line)
             outfile.writelines("WARNING: Passing user input to this function makes code "
                 "susceptible to a format string attack (CWE 134).\n")
 
+#look for functions/variables and perform checks
 def analyze(clean_code):
     for line in clean_code:
         find_vars(line[0], line[1])
         find_functions(line[0], line[1])
-    return clean_code
 
 # returns the line number of the mmap and munmap, as well as the variable that
 # is associated
@@ -286,15 +287,6 @@ def word_scope(dictionary, code, funct_dict):
             logging.warning('Memory allocated for variable %s on line %s but no call to free memory found.', variable, start_line)
             continue
 
-'''
-def use_after_free():
-    for keys in var_dict:
-        print(keys, var_dict[keys])
-    for keys in function_dict:
-        foo = keys.split('_')
-        print(foo)
-'''
-
 def start_end(var_dict, function_dict, start_word, end_word, code):
     opened = {} #(start,end, var)
     for keys in function_dict:
@@ -319,10 +311,6 @@ def start_end(var_dict, function_dict, start_word, end_word, code):
         else:
             continue
     #returns list of variables and shit that are opened and closed
-    '''
-    print(opened)# in format {var,  open_function, line#}
-    print(closed)# in format {var:closed_function, line#opened, line#closed}
-    '''
     for keys in opened:
         if keys not in closed.keys():
             closed[keys] = (opened[keys][0],'', opened[keys][1],'')
@@ -330,6 +318,7 @@ def start_end(var_dict, function_dict, start_word, end_word, code):
     #print(closed)# in format {var:open_function, closed_function, line#opened, line#closed}
     return closed
 
+# checks for user defined functions that are never used in the code
 def check_user_defined():
     unused = []
     for function in function_dict:
@@ -345,7 +334,6 @@ def check_user_defined():
 
 if __name__ == "__main__":
     infiles, outfile = parse_args()
-
     logging.basicConfig(level=logging.WARNING)
     for infile in infiles:
         logging.warning("started analysis of '" + infile.name + "'")
@@ -359,12 +347,6 @@ if __name__ == "__main__":
         analyze(clean_code)
         #use_after_free()
         check_user_defined()
-        '''
-        print(function_dict)
-        print('----------------------------\n')
-        print(var_dict)
-        '''
-    
         for x in pairs:
             mapping = start_end(var_dict, function_dict,x[0], x[1], clean_code)
             word_scope(mapping,clean_code, function_dict) # for text1
