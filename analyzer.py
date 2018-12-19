@@ -320,9 +320,10 @@ def check_user_defined():
             unused.append(f_name)
         elif f_name in unused:
             unused.remove(f_name)
-    outfile.writelines("WARNING: The following function(s): ")
-    outfile.writelines(unused)
-    outfile.writelines("\nare defined but never used. Consider removing from code.\n")
+    if len(unused) > 0:
+        outfile.writelines("WARNING: The following function(s): ")
+        outfile.writelines(unused)
+        outfile.writelines("\nare defined but never used. Consider removing from code.\n")
 
 if __name__ == "__main__":
     infiles, outfile = parse_args()
