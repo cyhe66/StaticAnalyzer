@@ -22,13 +22,13 @@ reassignment = re.compile(r'\b^(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*'
 #TODO: does not catch: x = x+1 properly
 
 #look for function call: [type var =] funct(args)
-function_match = re.compile(r'(?P<type>[\w|*]*?)\s*(?P<var>([\w]*?))\s*(?:\[(\w+)\])?\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>(.*))\)')
-'''
+# function_match = re.compile(r'(?P<type>[\w|*]*?)\s*(?P<var>([\w]*?))\s*(?:\[(\w+)\])?\s*([=]?|\s*?)\s*(?P<funct>([\w]*))\s*\((?P<args>(.*))\)')
+
 function_match = re.compile(r'(?P<type>(?:auto\s*|const\s*|unsigned\s*|signed\s*|register\s*|'
     r'size_t\s*|volatile\s*|static\s*|void\s*|short\s*|long\s*|char\s*|int\s*|float\s*|double'
     r'\s*|_Bool\s*|complex\s*)*(?:\*?\*?\s*))(?P<var>([\w]*?))\s*(?:\[(\w+)\])?\s*([=]?|\s*?)'
     r'\s*(?P<funct>([\w]*))\s*\((?P<args>(.*))\)')
-'''
+
 
 var_dict = {} #entries look like: {name: (type, value, line of first appearance, isModified, line_modified (if modified) size (if buffer/array))}
 function_dict = {} #entries look like {function: param_list, userDefined}
@@ -242,7 +242,6 @@ def analyze(clean_code):
 # returns the line number of the mmap and munmap, as well as the variable that
 # is associated
 def word_scope(dictionary, code, funct_dict):
-    #print(dictionary)
     for keys in dictionary:
         variable = keys
         start_name = dictionary[keys][0]
@@ -259,7 +258,6 @@ def word_scope(dictionary, code, funct_dict):
             try:
                 if funct_dict[check_ifStr]:
                     last_str = funct_dict[check_ifStr]
-                    #print('!!!!!!!!!!!!!!!!!!!!!!!!',last_str) 
                 elif funct_dict[check_whileStr]:
                     last_str = funct_dict[check_whileStr]
                 elif funct_dict[check_switchStr]:
@@ -280,14 +278,13 @@ def word_scope(dictionary, code, funct_dict):
                             stack.pop()
                         if letter == ")" and stack[-1] == "(":
                             stack.pop()
-            print(stack)
             if re.match(close_re, tup[0]) != None:  # found an instance of munmap 
                 if (len(stack) == 0):
                     continue
             else:
-                logging.warning('Parentheses may not match for '+ start_name+"/"+exit_name)
+                outfile.writelines('WARNING: Parentheses may not match for '+ start_name+"/"+exit_name+"\n")
         except ValueError: #open but not closed
-            logging.warning('Memory allocated for variable %s on line %s but no call to free memory found.', variable, start_line)
+            outfile.writelines('WARNING: Memory allocated for variable ' + str(variable) + ' on line ' + str(start_line) + ' but no call to free memory found.\n')
             continue
 
 def start_end(var_dict, function_dict, start_word, end_word, code):
@@ -309,7 +306,7 @@ def start_end(var_dict, function_dict, start_word, end_word, code):
                         closed[str(variable)] = (opened[items][0],bar[0],opened[items][1], bar[1])
                         #see munmap, check the rest of the code for instances of that variable/function call
                     elif str(variable) == items and function_dict[keys][0][0] == str(variable) and str(variable) in closed:
-                        logging.warning('Line: '+ bar[1]+ ' This is a repeat call to '+end_word+' for '+ variable)
+                        outfile.writelines('Line: '+ bar[1]+ ' This is a repeat call to '+end_word+' for '+ variable + "\n")
         else:
             continue
     for keys in opened:
@@ -344,6 +341,7 @@ if __name__ == "__main__":
             code_tuple.append([line,length])
             clean_code = multi_comment_remover(code_tuple) #all comments now ignored
         analyze(clean_code)
+        # print(function_dict)
         check_user_defined()
         for x in pairs:
             mapping = start_end(var_dict, function_dict,x[0], x[1], clean_code)
