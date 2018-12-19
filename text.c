@@ -14,6 +14,10 @@ size_t getFilesize(const char* filename) {
 	stat(filename, &st);
 	return st.st_size;
 }
+
+int testFunction() {
+	return 0;
+}
 //this is a full comment
 /*this is even more comments */
 /* multiline
