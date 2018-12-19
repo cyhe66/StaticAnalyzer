@@ -286,7 +286,16 @@ def word_scope(dictionary, code, funct_dict):
             logging.warning('Memory allocated for variable %s on line %s but no call to free memory found.', variable, start_line)
             continue
 
-def start_end(var_dict, function_dict, start_word, end_word):
+'''
+def use_after_free():
+    for keys in var_dict:
+        print(keys, var_dict[keys])
+    for keys in function_dict:
+        foo = keys.split('_')
+        print(foo)
+'''
+
+def start_end(var_dict, function_dict, start_word, end_word, code):
     opened = {} #(start,end, var)
     for keys in function_dict:
         if start_word in keys:
@@ -295,13 +304,18 @@ def start_end(var_dict, function_dict, start_word, end_word):
                 if str(attributes[2]) == (foo[1]):
                     opened[variable] = (foo[0],foo[1])
     closed = {}
+    #if see free, but no open, throw exception/log warning
     for keys in function_dict:
         if end_word in keys:
             bar = keys.split('_')
+            #print(bar)
             for variable, attributes in var_dict.items():
                 for items in opened:
-                    if str(variable) == items and function_dict[keys][0][0] == str(variable):
+                    if str(variable) == items and function_dict[keys][0][0] == str(variable) and str(variable) not in closed:
                         closed[str(variable)] = (opened[items][0],bar[0],opened[items][1], bar[1])
+                        #see munmap, check the rest of the code for instances of that variable/function call
+                    elif str(variable) == items and function_dict[keys][0][0] == str(variable) and str(variable) in closed:
+                        logging.warning('Line: '+ bar[1]+ ' This is a repeat call to '+end_word+' for '+ variable)
         else:
             continue
     #returns list of variables and shit that are opened and closed
@@ -343,10 +357,16 @@ if __name__ == "__main__":
             code_tuple.append([line,length])
             clean_code = multi_comment_remover(code_tuple) #all comments now ignored
         analyze(clean_code)
+        #use_after_free()
         check_user_defined()
+        '''
+        print(function_dict)
+        print('----------------------------\n')
+        print(var_dict)
+        '''
     
         for x in pairs:
-            mapping = start_end(var_dict, function_dict,x[0], x[1])
+            mapping = start_end(var_dict, function_dict,x[0], x[1], clean_code)
             word_scope(mapping,clean_code, function_dict) # for text1
         var_dict = {}
         function_dict = {}

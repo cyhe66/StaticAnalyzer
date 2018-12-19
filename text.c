@@ -33,7 +33,9 @@ int main(int argc, char** argv) {
 	//Cleanup
 	int rc = munmap(mmappedData, filesize);
 	assert(rc == 0);
+	int rc = munmap(mmappedData, filesize);
 	close(fd);
+	int something = mmappedData;
 	void* c = mmap(NULL, 32, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANON, -1, 0);
 	strcpy();
 	bzero();
