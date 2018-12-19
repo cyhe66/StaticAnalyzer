@@ -107,7 +107,6 @@ def multi_comment_remover(code_tuple):
     return clean_code
 
 def find_vars(line, linenum):
-    #check regex
     d = declaration.match(line)
     m = initialization.match(line)
     r = reassignment.match(line)
@@ -152,7 +151,6 @@ def find_functions(line, linenum): # match regex and add function to dictionary 
         if f.group('type') and '=' not in line:
             user_defined = True
 
-        #temporarily disabling keywords check
         #if function not in c_keywords:     #create a key entry for the function function_line#_char#
         key = function+"_"+str(linenum)+"_"+str(line.find(function))
         function_dict[key] = (argts, user_defined)
@@ -240,7 +238,6 @@ def analyze(clean_code):
 
 # returns the line number of the mmap and munmap, as well as the variable that
 # is associated
-#def word_scope(function_name, exit_name, start_line, end_line, code, funct_dict):
 def word_scope(dictionary, code, funct_dict):
     for keys in dictionary:
         variable = keys
@@ -278,7 +275,6 @@ def word_scope(dictionary, code, funct_dict):
                             stack.pop()
 
             if re.match(close_re, tup[0]) != None:  # found an instance of munmap 
-                #tup[0] is the line with the closing operator 
                 if (len(stack) == 0):
                     continue
             else:
@@ -296,11 +292,9 @@ def start_end(var_dict, function_dict, start_word, end_word, code):
                 if str(attributes[2]) == (foo[1]):
                     opened[variable] = (foo[0],foo[1])
     closed = {}
-    #if see free, but no open, throw exception/log warning
     for keys in function_dict:
         if end_word in keys:
             bar = keys.split('_')
-            #print(bar)
             for variable, attributes in var_dict.items():
                 for items in opened:
                     if str(variable) == items and function_dict[keys][0][0] == str(variable) and str(variable) not in closed:
@@ -310,7 +304,6 @@ def start_end(var_dict, function_dict, start_word, end_word, code):
                         logging.warning('Line: '+ bar[1]+ ' This is a repeat call to '+end_word+' for '+ variable)
         else:
             continue
-    #returns list of variables and shit that are opened and closed
     for keys in opened:
         if keys not in closed.keys():
             closed[keys] = (opened[keys][0],'', opened[keys][1],'')
@@ -331,7 +324,6 @@ def check_user_defined():
     outfile.writelines(unused)
     outfile.writelines("\nare defined but never used. Consider removing from code.\n")
 
-
 if __name__ == "__main__":
     infiles, outfile = parse_args()
     logging.basicConfig(level=logging.WARNING)
@@ -345,7 +337,6 @@ if __name__ == "__main__":
             code_tuple.append([line,length])
             clean_code = multi_comment_remover(code_tuple) #all comments now ignored
         analyze(clean_code)
-        #use_after_free()
         check_user_defined()
         for x in pairs:
             mapping = start_end(var_dict, function_dict,x[0], x[1], clean_code)
